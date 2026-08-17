@@ -1,11 +1,11 @@
 import { AppError } from './errors.js';
-import type { PointSystemType } from './types.js';
+import { PointSystemType } from './types.js';
 
 export const FIBONACCI_SEQUENCE = [0, 1, 2, 3, 5, 8, 13, 21, 34, 55];
 
 const SLIDER_MAX_CEILING: Record<PointSystemType, number> = {
-  numerical: 20,
-  fibonacci: 64,
+  [PointSystemType.Numerical]: 20,
+  [PointSystemType.Fibonacci]: 64,
 };
 
 export function validateSliderMax(type: PointSystemType, sliderMax: number): void {
@@ -23,7 +23,7 @@ export function validateSliderMax(type: PointSystemType, sliderMax: number): voi
 
 export function computeAxisValues(type: PointSystemType, sliderMax: number): number[] {
   validateSliderMax(type, sliderMax);
-  if (type === 'numerical') {
+  if (type === PointSystemType.Numerical) {
     return Array.from({ length: sliderMax + 1 }, (_, i) => i);
   }
   return FIBONACCI_SEQUENCE.filter((value) => value <= sliderMax);

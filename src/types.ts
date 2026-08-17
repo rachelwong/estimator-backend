@@ -1,4 +1,9 @@
-export type PointSystemType = 'numerical' | 'fibonacci';
+export const PointSystemType = {
+  Numerical: 'numerical',
+  Fibonacci: 'fibonacci',
+} as const;
+
+export type PointSystemType = (typeof PointSystemType)[keyof typeof PointSystemType];
 
 export interface PointSystem {
   type: PointSystemType;
