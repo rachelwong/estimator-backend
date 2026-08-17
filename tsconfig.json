@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2025",
+    "lib": ["ES2025"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "sourceMap": true,
+    "rootDir": ".",
+    "outDir": "dist"
+  },
+  "include": ["src/**/*", "tests/**/*", "scripts/**/*"]
+}
