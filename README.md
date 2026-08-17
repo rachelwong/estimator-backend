@@ -1,0 +1,3 @@
+### Jira poker - backend
+
+A fullstack sprint-estimation app, "planning poker" with a 2D twist: a time × resources grid instead of a single point value. For use in software development teams to provide estimates on how many story points should be attached to a ticketed task. This is an attempt to use time, resources (people, 3rd party services, money, anything of value) as parameters to scope down points which can inform effort, velocity, anything that a team wants to measure. 
