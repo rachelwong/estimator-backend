@@ -27,3 +27,9 @@ This applies even when the literal is already SCREAMING_SNAKE_CASE and looks con
 ## Does not apply to `tests/`
 
 `.claude/skills/test-conventions/SKILL.md` deliberately wants test files to hand-type raw literals (`'numerical'`, `'INVALID_SLIDER_MAX'`) as expected values, independent of the implementation's constants — that independence is what makes the assertion a real check rather than the same claim written twice. Don't "fix" test literals by swapping in the production constant; that would undermine the rule the other skill exists to enforce.
+
+## Centralizing doesn't help when the duplicate is outside the module graph
+
+This skill's fix (const object, single import) only works when every duplicate site can `import` the constant. Some duplicates can't — a value also hardcoded in `.env.example`, a YAML config, a README, or an external dashboard setting has no TS-side file that reaches it, so moving the constant into a shared `constants.ts` changes nothing about the actual drift risk.
+
+**What to do instead**: write a test that reads both sources at runtime and asserts they agree (e.g. `readFileSync('.env.example')`, parse the relevant line, compare against the exported constant) — see `src/config.ts`'s `LOCAL_DEV_CORS_ORIGIN` / `tests/config.test.ts`. This converts "someone might forget to update both" into a failing `npm test` the moment they diverge, which centralizing can't do for a file outside the module graph.
