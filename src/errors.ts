@@ -5,6 +5,8 @@ export const ErrorCode = {
   InvalidAdminToken: 'INVALID_ADMIN_TOKEN',
   InvalidSelection: 'INVALID_SELECTION',
   SessionEnded: 'SESSION_ENDED',
+  InvalidRequest: 'INVALID_REQUEST',
+  InternalError: 'INTERNAL_ERROR',
 } as const;
 
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
@@ -16,6 +18,8 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   [ErrorCode.InvalidAdminToken]: 403,
   [ErrorCode.InvalidSelection]: 400,
   [ErrorCode.SessionEnded]: 409,
+  [ErrorCode.InvalidRequest]: 400,
+  [ErrorCode.InternalError]: 500,
 };
 
 export class AppError extends Error {
