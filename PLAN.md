@@ -221,12 +221,23 @@ export function createApp(config: Config): Express;
 
 ### Step 4 — Socket.IO layer ✅ Built
 
-Order: `ws/ioServer.ts` → `ws/handlers.ts` → extend `server.ts` → `tests/handlers.test.ts` → `scripts/manual-ws-client.mjs`.
+Order: `ws/events.ts` → `ws/ioServer.ts` → `ws/handlers.ts` → extend `server.ts` → `tests/handlers.test.ts` → `tests/server.test.ts`.
+
+#### `src/ws/events.ts`
+
+```ts
+export const WsEvent = { Join: 'join', AdminAuth: 'admin-auth', SelectSquare: 'select-square', EndSession: 'end-session', SessionInfo: 'session-info', Joined: 'joined', AdminAcknowledged: 'admin-acknowledged', SelectionAcknowledged: 'selection-acknowledged', SessionEnded: 'session-ended', Error: 'error' } as const;
+export interface ClientToServerEvents { /* join, admin-auth, select-square, end-session */ }
+export interface ServerToClientEvents { /* session-info, joined, admin-acknowledged, selection-acknowledged, session-ended, error */ }
+export interface SocketData { participantId?: string }
+```
+
+**Why**: the WS wire protocol's shared vocabulary — same role `errors.ts`'s `ErrorCode` plays for error codes. `WsEvent`'s literal values key both interfaces, so `.on()`/`.emit()` calls are checked against the event name *and* its payload shape at compile time, not just the name — this repo's `no-magic-strings` convention, applied to Socket.IO. `SocketData` types `socket.data`, Socket.IO's built-in per-connection state slot.
 
 #### `src/ws/ioServer.ts`
 
 ```ts
-export function createIoServer(httpServer: http.Server, config: Config): Server;
+export function createIoServer(httpServer: http.Server, config: Config): Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData>;
 ```
 
 **Why**: pure construction, no listeners registered here — mirrors `app.ts`'s separation of "build" from "start."
@@ -234,17 +245,21 @@ export function createIoServer(httpServer: http.Server, config: Config): Server;
 #### `src/ws/handlers.ts`
 
 ```ts
-export function registerSocketHandlers(io: Server): void;
-function withErrorHandling(socket: Socket, fn: () => void): void;  // shared AppError → 'error' event translation
+export function registerSocketHandlers(io: AppServer): void;
+function withErrorHandling(socket: AppSocket, fn: () => void): void;
+function handleJoin(socket: AppSocket, session: SessionState, name: string): void;
+function handleAdminAuth(socket: AppSocket, session: SessionState, adminToken: string): void;
+function handleSelectSquare(socket: AppSocket, session: SessionState, payload: { time: number; resource: number }): void;
+function handleEndSession(io: AppServer, socket: AppSocket, session: SessionState, adminToken: string): void;
 ```
 
-**Why**: a single `io.on('connection', ...)` registers every event. Each socket keeps its own `participantId` in closure state, set by `join` or `admin-auth` and never read from an incoming payload — never trust the client, applied to identity rather than input shape.
+**Why**: `registerSocketHandlers` only does connection setup (session lookup, room join, `session-info` emit) and delegates each event straight to its own named handler, rather than four inline closures in one long callback. `withErrorHandling` translates a thrown `AppError` into `WsEvent.Error` and logs it — `console.warn` for the expected case, `console.error` (full value) for a true-unexpected bug — the same two-tier treatment `middleware/errorHandler.ts` gives REST, so a real WS bug is as visible in the logs as its REST equivalent. Per-connection identity lives in `socket.data.participantId`, set by `handleJoin`/`handleAdminAuth` and never read from an incoming payload — never trust the client, applied to identity rather than input shape.
 
 - **On connect** — reads `sessionId` from the handshake query; an unknown session gets `error` + disconnect. An *ended* session is still admitted (see the race note below) and receives `session-info` with `ended: true`.
-- **`join` (name)** → `addParticipant`, stores the returned id as this socket's `participantId`, acks with `{participantId, name}` — the *stored* (post-dedup) name, same reasoning as `POST /sessions`'s response in Step 3.
-- **`admin-auth` (adminToken)** → `validateAdminToken`, sets `participantId` to the admin's own id, acks with `{participantId, name, selection}`. Including the current selection is what makes a second admin tab, or a refresh, show the real vote instead of a blank grid (decision #19).
-- **`select-square` ({time, resource})** → `selectSquare`, reading `participantId` only from closure state. If it isn't set yet (an event arriving before `join`/`admin-auth` resolved), reject with a generic `error` — no dedicated error code, since this is only reachable via a hand-forged socket call, never a real client flow (decision #22).
-- **`end-session` (adminToken)** → `endSession`; a no-op if already ended (no re-broadcast); otherwise `io.to(sessionId).emit('session-ended', reveal)` — the one broadcast event in the system.
+- **`handleJoin`** → `addParticipant`, stores the returned id in `socket.data.participantId`, acks with `{participantId, name}` — the *stored* (post-dedup) name, same reasoning as `POST /sessions`'s response in Step 3.
+- **`handleAdminAuth`** → `validateAdminToken`, sets `socket.data.participantId` to the admin's own id, acks with `{participantId, name, selection}`. Including the current selection is what makes a second admin tab, or a refresh, show the real vote instead of a blank grid (decision #19).
+- **`handleSelectSquare`** → `selectSquare`, reading `participantId` only from `socket.data`. If it isn't set yet (an event arriving before join/admin-auth resolved), reject with a generic `error` — no dedicated error code, since this is only reachable via a hand-forged socket call, never a real client flow (decision #22).
+- **`handleEndSession`** → `endSession`; a no-op if already ended (no re-broadcast); otherwise `io.to(sessionId).emit(WsEvent.SessionEnded, reveal)` — the one broadcast event in the system.
 - **No `disconnect` handler** — nothing server-side changes when a socket disconnects; there's no presence indicator and no state tied to connection liveness.
 
 **Ended-session connect race**: a socket can start connecting in the same instant the admin ends the session. Rather than special-casing it, the socket is simply admitted and told `ended: true` — every action after that still gets rejected downstream with `SESSION_ENDED`, so the race is inert, not unsafe (decision #22).
@@ -265,9 +280,7 @@ function withErrorHandling(socket: Socket, fn: () => void): void;  // shared App
 - `select-square` — select/deselect/change-vote over the wire; an out-of-range pair → `error INVALID_SELECTION`; sent before identity resolved → generic `error`; on an ended session → `error SESSION_ENDED`.
 - `end-session` — broadcasts to every socket in the room (asserted with two connected sockets, not just the caller); a second call produces no second broadcast; wrong token → `error INVALID_ADMIN_TOKEN`, session stays active.
 
-#### `scripts/manual-ws-client.mjs`
-
-Throwaway `.mjs` script (plain Socket.IO client, not compiled) for a final live-server smoke test — real port binding, both Express and Socket.IO sharing one `http.Server`. Secondary to the automated suite above; not a substitute for it. Run against `npm run dev` (or a compiled `npm run start`) with `node scripts/manual-ws-client.mjs`; verified against both.
+**Test Cases** (`tests/server.test.ts`): one real end-to-end round trip — `POST /sessions` over real HTTP, then `admin-auth` → `select-square` → `end-session` over a real WS connection on the *same* real port, confirming `GET /sessions/:id` reflects `ended: true` afterward. This is the only test that proves `server.ts`'s actual composition (Express + Socket.IO sharing one `http.Server`) works — `tests/sessions.test.ts` exercises `app.ts` via `supertest` (no real port), `tests/handlers.test.ts` exercises the WS layer against a bare `http.Server` (no Express mounted). Replaces the old manual `scripts/manual-ws-client.mjs` smoke test, which proved the same thing but only when a human remembered to run it.
 
 ---
 
