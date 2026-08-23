@@ -133,7 +133,10 @@ export function addParticipant(sessionId: string, name: string): Participant {
 // Records (or clears) a participant's vote. Rejects if the session has ended
 // or the {time, resource} pair isn't a real square on this point system.
 // Voting the same square again deselects it; voting a different square
-// overwrites the previous choice.
+// overwrites the previous choice. This overwrite is also how two admin tabs
+// (both authenticated to the same adminParticipantId, since admin-auth never
+// mints a per-socket identity) end up last-write-wins with no live sync
+// between them — intentional, not a bug (decision #20).
 export function selectSquare(
   sessionId: string,
   participantId: string,
