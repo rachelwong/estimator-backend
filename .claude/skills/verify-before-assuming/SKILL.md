@@ -1,9 +1,9 @@
 ---
 name: verify-before-assuming
-description: Two verification habits for this repo, each learned from a real bug in sessionStore.ts, not hypothetical advice — before reusing or inlining a helper function, check every place that actually calls it instead of assuming it's only used once; before writing a test for a condition built from || or &&, write a case that isolates each side instead of only a case where both sides agree. Use when writing or reviewing a function that calls another validator/helper, or a test asserting behavior behind a multi-part boolean condition.
+description: Three verification habits for this repo, each learned from a real bug or gap in this codebase, not hypothetical advice — before reusing or inlining a helper function, check every place that actually calls it instead of assuming it's only used once; before writing a test for a condition built from || or &&, write a case that isolates each side instead of only a case where both sides agree; before removing a manual smoke-test script, check whether an automated test actually exercises the same wiring, not just its individual pieces. Use when writing or reviewing a function that calls another validator/helper, a test asserting behavior behind a multi-part boolean condition, or a composition-root file (server.ts, app entry point) that wires together already-tested modules.
 ---
 
-Two habits, each caught a real bug in this repo when followed — and missed one when skipped.
+Three habits, each caught a real bug or gap in this repo when followed — and missed one when skipped.
 
 ## Before touching a function, find every place that calls it
 
@@ -20,3 +20,11 @@ Two habits, each caught a real bug in this repo when followed — and missed one
 **Why it matters**: `time` and `resource` are independent coordinates on the estimation grid. A real bad request — a forged WS payload, or a client bug touching only one axis — is far more likely to have exactly one bad coordinate than both. If `||` silently became `&&`, that single-bad-coordinate case would be wrongly accepted and written into `participant.selection`, corrupting what every participant later sees in the reveal. Only a test that isolates one side catches that.
 
 **How to apply it**: whenever a condition combines two or more parts with `||` or `&&`, write at least one test case where only one part is true (or false) and the others are the "normal" value — not just a case where every part agrees. That one case is what actually proves each part of the condition is being checked on its own, not just along for the ride.
+
+## Before removing a manual smoke test, check what's actually testing the wiring
+
+**What happened**: `scripts/manual-ws-client.mjs` was the only thing that ever proved `server.ts`'s real composition worked — Express and Socket.IO sharing one `http.Server`/port, the way Render's single-port free tier requires. `tests/sessions.test.ts` tests `app.ts` via `supertest` (no real port, no Socket.IO attached); `tests/handlers.test.ts` tests the WS layer against a bare `http.Server` (no Express mounted). Both looked like solid backend coverage, but neither exercised the one line where the two actually get wired together. That gap was invisible until asked directly: "do I really need this manual script?"
+
+**Why it matters**: splitting a system into independently-tested pieces is good practice, but the composition step — the one file where those pieces actually get assembled (`server.ts`, `main.ts`, an app entry point) — isn't automatically covered just because each piece is. It's easy to end up with full confidence in the parts and zero automated confidence in the whole, with only a manual script (that nothing forces anyone to run) standing in the gap.
+
+**How to apply it**: before deleting a manual smoke-test script, or when reviewing a composition-root file, ask specifically "which automated test, if any, imports and wires these pieces together the *same way this file does* — not just each piece separately?" If nothing does, either add a small test that does (see `tests/server.test.ts`, which replaced `scripts/manual-ws-client.mjs`) or keep the manual step and say so explicitly, rather than silently relying on the sum of the parts.
