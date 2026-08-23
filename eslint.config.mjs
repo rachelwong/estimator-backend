@@ -18,6 +18,13 @@ export default tseslint.config(
   {
     files: ['**/*.mjs', 'vitest.config.ts'],
     extends: [tseslint.configs.disableTypeChecked],
+    languageOptions: {
+      globals: {
+        process: 'readonly',
+        console: 'readonly',
+        fetch: 'readonly',
+      },
+    },
   },
   prettierConfig,
   { ignores: ['dist/**', 'node_modules/**'] },
