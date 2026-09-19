@@ -7,14 +7,14 @@ awake. Rachel does every dashboard step.
 Three checklists below: **backend** (R), **frontend** (F) and **keep-alive**
 (C). They interleave, because each side needs the other's URL:
 
-| # | Do | Hands over |
-| --- | --- | --- |
-| 1 | Both repos: code changes, local checks, push (R1–R4, F1) | — |
-| 2 | Import the frontend to Vercel (F2) | the Vercel URL |
-| 3 | Create the Render service, `CORS_ORIGIN` = that URL (R5–R7) | the Render URL |
-| 4 | Set the frontend's `VITE_*` vars to it, redeploy (F3–F5) | — |
-| 5 | Create the keep-alive job (C1–C4) | — |
-| 6 | Verify: R8–R9, F6–F13, C5–C6 | — |
+| #   | Do                                                          | Hands over     |
+| --- | ----------------------------------------------------------- | -------------- |
+| 1   | Both repos: code changes, local checks, push (R1–R4, F1)    | —              |
+| 2   | Import the frontend to Vercel (F2)                          | the Vercel URL |
+| 3   | Create the Render service, `CORS_ORIGIN` = that URL (R5–R7) | the Render URL |
+| 4   | Set the frontend's `VITE_*` vars to it, redeploy (F3–F5)    | —              |
+| 5   | Create the keep-alive job (C1–C4)                           | —              |
+| 6   | Verify: R8–R9, F6–F13, C5–C6                                | —              |
 
 ```mermaid
 flowchart LR
@@ -31,6 +31,14 @@ Both URLs follow the project name (`<project>.vercel.app`,
 `<service>.onrender.com`), so they're predictable — but confirm, don't assume,
 in case a name was taken.
 
+The production frontend is
+
+```
+https://estimator-frontend-ashen.vercel.app
+```
+
+and that exact string, no trailing slash, is the `CORS_ORIGIN` Render needs.
+
 Why each value exists is in `estimator-plan.md` → "Deployment" and "Secrets &
 environment configuration". Not repeated here.
 
@@ -44,27 +52,27 @@ neither repo owns the sequence. Edit both, or they drift.
 
 **Code** (`estimator-backend/`)
 
-- [ ] R1. Add `render.yaml`:
-      ```yaml
-      services:
-        - type: web
-          name: estimator-backend
-          runtime: node
-          plan: free
-          buildCommand: npm ci --include=dev && npm run build
-          startCommand: npm run start
-          healthCheckPath: /healthz
-          autoDeploy: true
-          envVars:
-            - key: NODE_ENV
-              value: production
-            - key: CORS_ORIGIN
-              sync: false # typed into the dashboard at R5
-      ```
+- [x] R1. Add `render.yaml`:
+      `yaml
+    services:
+      - type: web
+        name: estimator-backend
+        runtime: node
+        plan: free
+        buildCommand: npm ci --include=dev && npm run build
+        startCommand: npm run start
+        healthCheckPath: /healthz
+        autoDeploy: true
+        envVars:
+          - key: NODE_ENV
+            value: production
+          - key: CORS_ORIGIN
+            sync: false # typed into the dashboard at R5
+    `
       No other code change. `/healthz`, the single-port `http.Server`, the
       `PORT` binding and the production `CORS_ORIGIN` checks are already there.
-- [ ] R2. `npm run typecheck && npm run lint && npm test && npm run build` pass.
-- [ ] R3. `NODE_ENV=production CORS_ORIGIN=https://example.com npm start` boots
+- [x] R2. `npm run typecheck && npm run lint && npm test && npm run build` pass.
+- [x] R3. `NODE_ENV=production CORS_ORIGIN=https://example.com npm start` boots
       and answers `/healthz` — this runs the compiled ESM output, where an
       import problem would first show up. Then check the guard: the same command
       **without** `CORS_ORIGIN` refuses to start.
@@ -90,49 +98,51 @@ neither repo owns the sequence. Edit both, or they drift.
 
 **Code** (`estimator-frontend/`)
 
-- [ ] F1a. Add `vercel.json`:
-      ```json
-      { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
-      ```
+- [x] F1a. Add `vercel.json`:
+      `json
+    { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+    `
       Without it, a refresh or a pasted share link (`/:sessionId/join`) hits
       Vercel's 404 before React Router loads.
-- [ ] F1b. `vite.config.ts`: fail a production build when either URL is missing
+- [x] F1b. `vite.config.ts`: fail a production build when either URL is missing
       or isn't `https://`, so a misconfigured build can't ship
       `undefined/sessions`:
-      ```ts
-      export default defineConfig(({ command, mode }) => {
-        if (command === 'build') {
-          const env = loadEnv(mode, process.cwd(), 'VITE_')
-          for (const key of ['VITE_API_BASE_URL', 'VITE_SOCKET_URL']) {
-            const value = env[key]
-            if (!value) throw new Error(`${key} must be set for a build`)
-            if (process.env.VERCEL && !value.startsWith('https://'))
-              throw new Error(`${key} must be https:// (got ${value})`)
-          }
+      ``ts
+    export default defineConfig(({ command, mode }) => {
+      if (command === 'build') {
+        const env = loadEnv(mode, process.cwd(), 'VITE_')
+        for (const key of ['VITE_API_BASE_URL', 'VITE_SOCKET_URL']) {
+          const value = env[key]
+          if (!value) throw new Error(`${key} must be set for a build`)
+          if (process.env.VERCEL && !value.startsWith('https://'))
+            throw new Error(`${key} must be https:// (got ${value})`)
         }
-        return { /* existing config */ }
-      })
-      ```
+      }
+      return { /* existing config */ }
+    })
+    ``
       The `VERCEL` check keeps a local `npm run build` against
       `http://localhost:3001` working.
-- [ ] F1c. `scripts/smoke/lib.mjs`: read `APP` and `API` from `SMOKE_APP_URL`
+- [x] F1c. `scripts/smoke/lib.mjs`: read `APP` and `API` from `SMOKE_APP_URL`
       and `SMOKE_API_URL`, falling back to today's localhost values. Lets the
       same suite run against production.
-- [ ] F1d. `npm run build` and `npm run lint` pass, and the smoke suite passes
+- [x] F1d. `npm run build` and `npm run lint` pass, and the smoke suite passes
       against a local backend — it hasn't been run since the welcome-page commit
       (`docs/plans/ui-refresh.md` verification step 2).
 - [ ] F1e. Push to `master`.
 
 **Dashboard, first pass** — do this before R5, it's where the Vercel URL comes from
 
-- [ ] F2a. Add New → Project → import `rachelwong/estimator-frontend`.
+- [x] F2a. Add New → Project → import `rachelwong/estimator-frontend`.
 - [ ] F2b. Settings → General → Node.js Version: **24.x**, to match the backend
       and local.
-- [ ] F2c. Settings → Deployment Protection → Vercel Authentication **off for
+- [x] F2c. Settings → Deployment Protection → Vercel Authentication **off for
       Production** (see Gotchas — this one is invisible to you and breaks every
       share link).
-- [ ] F2d. Note the production URL, e.g. `https://estimator-frontend.vercel.app`.
-      The first build **fails** on the env check. Expected — hand this URL to R5.
+- [x] F2d. Note the production URL — above. Done before F1b landed, so the first
+      build **succeeded** instead of failing the env check, shipping a bundle
+      with no API URL. Once F1e is pushed, builds fail on the check until F3
+      sets the vars. Hand the URL to R5.
 
 **Dashboard, second pass** — needs the Render URL from R6
 
@@ -190,44 +200,44 @@ every 10 minutes keeps the gap under 15 even if one ping runs late.
 
 From `render.yaml`, so confirm rather than retype. Only `CORS_ORIGIN` is typed in.
 
-| Setting | Value |
-| --- | --- |
-| Service type | Web Service |
+| Setting             | Value                                    |
+| ------------------- | ---------------------------------------- |
+| Service type        | Web Service                              |
 | Repository / branch | `rachelwong/estimator-backend`, `master` |
-| Region | Closest to the team. Permanent |
-| Runtime / instance | Node, Free |
-| Build command | `npm ci --include=dev && npm run build` |
-| Start command | `npm run start` |
-| Health check path | `/healthz` |
-| Auto-deploy | On |
-| Node version | 24, from `.nvmrc` |
+| Region              | Closest to the team. Permanent           |
+| Runtime / instance  | Node, Free                               |
+| Build command       | `npm ci --include=dev && npm run build`  |
+| Start command       | `npm run start`                          |
+| Health check path   | `/healthz`                               |
+| Auto-deploy         | On                                       |
+| Node version        | 24, from `.nvmrc`                        |
 
-| Env var | Value | Why |
-| --- | --- | --- |
-| `NODE_ENV` | `production` | Turns on the `CORS_ORIGIN` checks in `loadConfig()` |
+| Env var       | Value                          | Why                                                                                    |
+| ------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
+| `NODE_ENV`    | `production`                   | Turns on the `CORS_ORIGIN` checks in `loadConfig()`                                    |
 | `CORS_ORIGIN` | `https://<project>.vercel.app` | Exact match. No trailing slash, no path, no `*`. Update it if the frontend URL changes |
-| `PORT` | **don't set** | Render injects it; `server.ts` binds what it's given |
+| `PORT`        | **don't set**                  | Render injects it; `server.ts` binds what it's given                                   |
 
 No secrets: no database, no API keys, and `adminToken` is generated per Session
 at runtime. Saving any change restarts the service, wiping Sessions in progress.
 
 ### Vercel
 
-| Setting | Value |
-| --- | --- |
+| Setting                        | Value                                     |
+| ------------------------------ | ----------------------------------------- |
 | Repository / production branch | `rachelwong/estimator-frontend`, `master` |
-| Framework preset | Vite (auto-detected) |
-| Root directory | `./` |
-| Build command | `npm run build` (default for the preset) |
-| Output directory | `dist` (auto-detected) |
-| Install command | Default |
-| Node.js version | 24.x |
-| Deployment protection | Off for Production |
+| Framework preset               | Vite (auto-detected)                      |
+| Root directory                 | `./`                                      |
+| Build command                  | `npm run build` (default for the preset)  |
+| Output directory               | `dist` (auto-detected)                    |
+| Install command                | Default                                   |
+| Node.js version                | 24.x                                      |
+| Deployment protection          | Off for Production                        |
 
-| Env var (Production only) | Value | Why |
-| --- | --- | --- |
-| `VITE_API_BASE_URL` | `https://<service>.onrender.com` | No trailing slash — `lib/api.ts` appends `/sessions` |
-| `VITE_SOCKET_URL` | `https://<service>.onrender.com` | Same host. Socket.IO upgrades to `wss://` itself |
+| Env var (Production only) | Value                            | Why                                                  |
+| ------------------------- | -------------------------------- | ---------------------------------------------------- |
+| `VITE_API_BASE_URL`       | `https://<service>.onrender.com` | No trailing slash — `lib/api.ts` appends `/sessions` |
+| `VITE_SOCKET_URL`         | `https://<service>.onrender.com` | Same host. Socket.IO upgrades to `wss://` itself     |
 
 Both are compiled into the bundle and visible in devtools. That's fine — they're
 URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
@@ -239,11 +249,11 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 - **Deployment protection blocks every share link.** With Vercel Authentication
   on for Production, a share link sends the recipient to a Vercel login they
   have no account for — while you, signed in, see the app work perfectly. This
-  app has no accounts by design; the link *is* the invitation. Test it in a
+  app has no accounts by design; the link _is_ the invitation. Test it in a
   private window, not a second profile you're logged into (F2c, F9).
 - **Preview builds fail the env check, on purpose.** The `VITE_*` values are
   Production-only, so previews throw `VITE_API_BASE_URL must be set for a build`.
-  A preview that *did* build would load and then fail every request at the
+  A preview that _did_ build would load and then fail every request at the
   browser's CORS check, since `CORS_ORIGIN` names only the production domain —
   a slower, more confusing failure. Preview a branch by running both repos
   locally instead.
@@ -277,12 +287,12 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 
 ## Drift from `estimator-plan.md`
 
-| It says | This plan does | Why |
-| --- | --- | --- |
-| Deploy the backend first, "`CORS_ORIGIN` doesn't matter yet" | Import the frontend first, for its URL | `loadConfig()` throws when it's unset in production, so that deploy would fail its health check |
-| `buildCommand: npm install && npm run build` | `npm ci --include=dev && npm run build` | Otherwise `tsc` isn't installed. `npm ci` also honours the lockfile |
-| Vercel env vars on Production and Preview | Production only | Preview origins are blocked by CORS anyway |
-| Spin-down accepted; create the Session just before the meeting | A 10-minute keep-alive ping | Removes both the cold start and the mid-Session sleep that drops sockets |
+| It says                                                        | This plan does                          | Why                                                                                             |
+| -------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Deploy the backend first, "`CORS_ORIGIN` doesn't matter yet"   | Import the frontend first, for its URL  | `loadConfig()` throws when it's unset in production, so that deploy would fail its health check |
+| `buildCommand: npm install && npm run build`                   | `npm ci --include=dev && npm run build` | Otherwise `tsc` isn't installed. `npm ci` also honours the lockfile                             |
+| Vercel env vars on Production and Preview                      | Production only                         | Preview origins are blocked by CORS anyway                                                      |
+| Spin-down accepted; create the Session just before the meeting | A 10-minute keep-alive ping             | Removes both the cold start and the mid-Session sleep that drops sockets                        |
 
 ## Out of scope
 
