@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: estimator-backend
+    runtime: node
+    plan: free
+    # npm install with NODE_ENV=production omits devDependencies, which drops
+    # tsc and fails the build. --include=dev keeps it; ci honours the lockfile.
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # The Vercel production URL, typed into the dashboard when the service is
+      # created. Not in the repo: it changes with the frontend's domain.
+      - key: CORS_ORIGIN
+        sync: false
