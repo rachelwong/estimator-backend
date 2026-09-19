@@ -27,17 +27,16 @@ flowchart LR
     C --> V
 ```
 
-Both URLs follow the project name (`<project>.vercel.app`,
-`<service>.onrender.com`), so they're predictable — but confirm, don't assume,
-in case a name was taken.
-
-The production frontend is
+The two production URLs are
 
 ```
-https://estimator-frontend-ashen.vercel.app
+frontend  https://estimator-frontend-ashen.vercel.app
+backend   https://estimator-backend-1nf2.onrender.com
 ```
 
-and that exact string, no trailing slash, is the `CORS_ORIGIN` Render needs.
+The frontend string, exactly as above with no trailing slash, is the
+`CORS_ORIGIN` Render needs. The backend string is what the `VITE_*` vars, the
+keep-alive job and every `curl` below use.
 
 Why each value exists is in `estimator-plan.md` → "Deployment" and "Secrets &
 environment configuration". Not repeated here.
@@ -52,23 +51,29 @@ neither repo owns the sequence. Edit both, or they drift.
 
 **Code** (`estimator-backend/`)
 
+> **`render.yaml` is not what configured the live service.** At R5 the service
+> was created by hand (New → Web Service), not from a Blueprint, and Render
+> only reads `render.yaml` for Blueprint-created services. The file is kept as
+> documentation of intent — editing it changes nothing. Change settings in the
+> dashboard, and mirror them back into `render.yaml` by hand.
+
 - [x] R1. Add `render.yaml`:
       `yaml
-    services:
-      - type: web
-        name: estimator-backend
-        runtime: node
-        plan: free
-        buildCommand: npm ci --include=dev && npm run build
-        startCommand: npm run start
-        healthCheckPath: /healthz
-        autoDeploy: true
-        envVars:
-          - key: NODE_ENV
-            value: production
-          - key: CORS_ORIGIN
-            sync: false # typed into the dashboard at R5
-    `
+  services:
+    - type: web
+      name: estimator-backend
+      runtime: node
+      plan: free
+      buildCommand: npm ci --include=dev && npm run build
+      startCommand: npm run start
+      healthCheckPath: /healthz
+      autoDeploy: true
+      envVars:
+        - key: NODE_ENV
+          value: production
+        - key: CORS_ORIGIN
+          sync: false # typed into the dashboard at R5
+  `
       No other code change. `/healthz`, the single-port `http.Server`, the
       `PORT` binding and the production `CORS_ORIGIN` checks are already there.
 - [x] R2. `npm run typecheck && npm run lint && npm test && npm run build` pass.
@@ -76,20 +81,27 @@ neither repo owns the sequence. Edit both, or they drift.
       and answers `/healthz` — this runs the compiled ESM output, where an
       import problem would first show up. Then check the guard: the same command
       **without** `CORS_ORIGIN` refuses to start.
-- [ ] R4. Push to `master`.
+- [x] R4. Push to `master`.
 
 **Dashboard** — needs the Vercel URL from F2
 
-- [ ] R5. New → Blueprint → `rachelwong/estimator-backend`. When prompted for
-      `CORS_ORIGIN`, paste the Vercel URL: scheme and host, no trailing slash.
-- [ ] R6. Wait for the deploy to go live. Note the service URL.
-- [ ] R7. Confirm the settings Render picked up from `render.yaml` (see
-      Reference → Render). Check the region while you're there — it can't be
-      changed later without recreating the service.
+- [x] R5. New → **Web Service** → `rachelwong/estimator-backend`. (The plan said
+      Blueprint; it was done manually instead — see the note above.) Every
+      setting in Reference → Render was typed in by hand, including both env
+      vars. The name `estimator-backend` was taken, so Render assigned
+      `estimator-backend-1nf2`.
+- [x] R6. Wait for the deploy to go live. Service URL:
+      `https://estimator-backend-1nf2.onrender.com`.
+- [ ] R7. Confirm the settings against Reference → Render. Check the region
+      while you're there — it can't be changed later without recreating the
+      service.
 
 **Verify**
 
-- [ ] R8. `curl https://<service>.onrender.com/healthz` returns 200.
+- [x] R8. `curl https://estimator-backend-1nf2.onrender.com/healthz` returns 200
+      `{"status":"ok"}`. A real `POST /sessions` also returns a session with the
+      right axis values, and the response carries
+      `access-control-allow-origin: https://estimator-frontend-ashen.vercel.app`.
 - [ ] R9. Render → Logs shows the service listening, with no boot errors.
 
 ---
@@ -100,27 +112,27 @@ neither repo owns the sequence. Edit both, or they drift.
 
 - [x] F1a. Add `vercel.json`:
       `json
-    { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
-    `
+  { "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }] }
+  `
       Without it, a refresh or a pasted share link (`/:sessionId/join`) hits
       Vercel's 404 before React Router loads.
 - [x] F1b. `vite.config.ts`: fail a production build when either URL is missing
       or isn't `https://`, so a misconfigured build can't ship
       `undefined/sessions`:
       ``ts
-    export default defineConfig(({ command, mode }) => {
-      if (command === 'build') {
-        const env = loadEnv(mode, process.cwd(), 'VITE_')
-        for (const key of ['VITE_API_BASE_URL', 'VITE_SOCKET_URL']) {
-          const value = env[key]
-          if (!value) throw new Error(`${key} must be set for a build`)
-          if (process.env.VERCEL && !value.startsWith('https://'))
-            throw new Error(`${key} must be https:// (got ${value})`)
-        }
+  export default defineConfig(({ command, mode }) => {
+    if (command === 'build') {
+      const env = loadEnv(mode, process.cwd(), 'VITE_')
+      for (const key of ['VITE_API_BASE_URL', 'VITE_SOCKET_URL']) {
+        const value = env[key]
+        if (!value) throw new Error(`${key} must be set for a build`)
+        if (process.env.VERCEL && !value.startsWith('https://'))
+          throw new Error(`${key} must be https:// (got ${value})`)
       }
-      return { /* existing config */ }
-    })
-    ``
+    }
+    return { /* existing config */ }
+  })
+  ``
       The `VERCEL` check keeps a local `npm run build` against
       `http://localhost:3001` working.
 - [x] F1c. `scripts/smoke/lib.mjs`: read `APP` and `API` from `SMOKE_APP_URL`
@@ -134,7 +146,7 @@ neither repo owns the sequence. Edit both, or they drift.
 **Dashboard, first pass** — do this before R5, it's where the Vercel URL comes from
 
 - [x] F2a. Add New → Project → import `rachelwong/estimator-frontend`.
-- [ ] F2b. Settings → General → Node.js Version: **24.x**, to match the backend
+- [x] F2b. Settings → General → Node.js Version: **24.x**, to match the backend
       and local.
 - [x] F2c. Settings → Deployment Protection → Vercel Authentication **off for
       Production** (see Gotchas — this one is invisible to you and breaks every
@@ -146,11 +158,13 @@ neither repo owns the sequence. Edit both, or they drift.
 
 **Dashboard, second pass** — needs the Render URL from R6
 
-- [ ] F3. Settings → Environment Variables, **Production** only:
-      `VITE_API_BASE_URL` and `VITE_SOCKET_URL`, both the Render URL, no
-      trailing slash.
-- [ ] F4. Deployments → Redeploy. `VITE_*` values are compiled into the bundle
+- [x] F3. Settings → Environment Variables, **Production** only:
+      `VITE_API_BASE_URL` and `VITE_SOCKET_URL`, both
+      `https://estimator-backend-1nf2.onrender.com`, no trailing slash.
+- [x] F4. Deployments → Redeploy. `VITE_*` values are compiled into the bundle
       at build time, so saving them does nothing until a new build runs.
+      Confirmed: the live bundle contains the `onrender.com` host twice and no
+      `localhost:3001`.
 - [ ] F5. Confirm the build settings (see Reference → Vercel).
 
 **Verify** — on the production URL, two browser profiles
@@ -177,8 +191,13 @@ Render's free tier sleeps after 15 minutes with no inbound HTTP traffic, and a
 socket doesn't count — so a Session in progress can be put to sleep. Pinging
 every 10 minutes keeps the gap under 15 even if one ping runs late.
 
-- [ ] C1. Create a job: `GET https://<service>.onrender.com/healthz`, every 10
-      minutes (`*/10 * * * *`).
+- [ ] C1. Create a job: `GET https://estimator-backend-1nf2.onrender.com/healthz`,
+      every 10 minutes, **paused 2am–6am**: `*/10 0-1,6-23 * * *`, timezone
+      `Australia/Sydney` (cron-job.org handles DST). 24/7 would be 744 of the
+      750 free hours in a 31-day month — it fits, but with no margin, and
+      running out suspends the service until the next reset. 4 hours down lands
+      ~620 hours and only costs a cold start to a 2–6am Session, which doesn't
+      happen.
 - [ ] C2. Timeout: the maximum allowed. The first ping after a sleep can take
       30–60 seconds.
 - [ ] C3. Failure notifications: on. A run of failures means the backend is
