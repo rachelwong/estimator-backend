@@ -23,6 +23,10 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ NODE_ENV: 'production' })).toThrow(/CORS_ORIGIN/);
   });
 
+  it('throws in production when CORS_ORIGIN is set but empty', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production', CORS_ORIGIN: '' })).toThrow(/CORS_ORIGIN/);
+  });
+
   it('throws in production when CORS_ORIGIN has a trailing slash', () => {
     expect(() =>
       loadConfig({ NODE_ENV: 'production', CORS_ORIGIN: 'https://example.com/' }),
