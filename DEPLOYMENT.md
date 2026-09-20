@@ -203,7 +203,11 @@ every 10 minutes keeps the gap under 15 even if one ping runs late.
 - [ ] C3. Failure notifications: on. A run of failures means the backend is
       down, not merely asleep.
 - [ ] C4. Run the job's test once, and confirm Render → Logs shows the
-      `/healthz` request.
+      `/healthz` request. The line to look for is `GET /healthz`, logged by the
+      handler in `src/app.ts` — that log exists for this check and as the
+      service's heartbeat. A 200 with `x-render-origin-server: Render` and
+      `cf-cache-status: DYNAMIC` in the job's response confirms the ping reached
+      the app rather than a Cloudflare cache, even before the logs show it.
 - [ ] C5. An hour later: the job's history is all 200s, and Render → Events
       shows no spin-down since the job started.
 - [ ] C6. Confirm this is the **only** free Web Service in the Render workspace

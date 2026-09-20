@@ -11,7 +11,14 @@ export function createApp(config: Config): Express {
   app.use(express.json());
 
   // Basic health check so uptime monitors can confirm the server is running.
+  // The log line is the service's heartbeat: nothing else here logs a
+  // successful request, so without it the log stream stays silent until
+  // something errors, and the keep-alive ping is invisible. At one ping per 10
+  // minutes that's cheap, and it's what makes a lost session diagnosable — a
+  // gap in the heartbeat followed by server.ts's "listening on port" line is a
+  // restart (deploy or spin-down) that wiped the in-memory session store.
   app.get('/healthz', (_req, res) => {
+    console.log('GET /healthz');
     res.status(200).json({ status: 'ok' });
   });
 
