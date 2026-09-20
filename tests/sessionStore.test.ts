@@ -63,8 +63,14 @@ describe('createSession', () => {
     );
   });
 
-  it('rejects a non-alphanumeric admin name (an embedded space survives trimming)', () => {
-    expectAppError(() => createSession({ adminName: 'Amy Bee', ...NUMERICAL }), 'INVALID_NAME');
+  it('rejects an admin name carrying a symbol', () => {
+    expectAppError(() => createSession({ adminName: 'Amy@Bee', ...NUMERICAL }), 'INVALID_NAME');
+  });
+
+  it('keeps an embedded space and capitalizes each word', () => {
+    const session = createSession({ adminName: 'amy bee', ...NUMERICAL });
+
+    expect(session.participants.get(session.adminParticipantId)?.name).toBe('Amy Bee');
   });
 
   it('regenerates the session id when the generator produces a collision', () => {
@@ -113,10 +119,18 @@ describe('addParticipant', () => {
     expect(participant.name).toBe('Bea');
   });
 
-  it('rejects an embedded space instead of stripping it', () => {
+  it('rejects a name carrying a symbol', () => {
     const session = createSession({ adminName: 'Amy', ...NUMERICAL });
 
-    expectAppError(() => addParticipant(session.id, 'Bea Cee'), 'INVALID_NAME');
+    expectAppError(() => addParticipant(session.id, 'Bea@Cee'), 'INVALID_NAME');
+  });
+
+  it('keeps an embedded space and collapses a doubled one', () => {
+    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+
+    const participant = addParticipant(session.id, 'bea  cee');
+
+    expect(participant.name).toBe('Bea Cee');
   });
 
   it('capitalizes a valid name', () => {

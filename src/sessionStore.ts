@@ -9,16 +9,20 @@ import type {
   SessionState,
 } from './types.js';
 import { generateAdminToken, generateParticipantId, generateSessionId } from './utils/id.js';
-import { validateParticipantName } from './utils/validation.js';
+import { normalizeParticipantName, validateParticipantName } from './utils/validation.js';
 
 const sessions = new Map<string, SessionState>();
 
-// Trims stray whitespace off a raw name, validates it, then capitalizes it
+// Normalizes a raw name's whitespace, validates it, then capitalizes each word
 // (first letter upper, rest lower) so every stored name is display-ready.
+// Per word, not per name: "jim bob" is "Jim Bob", not "Jim bob".
 function formatName(name: string): string {
-  const trimmed = name.trim();
-  validateParticipantName(trimmed);
-  return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
+  const normalized = normalizeParticipantName(name);
+  validateParticipantName(normalized);
+  return normalized
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
 }
 
 // Checks whether any current participant already has this name, ignoring case.

@@ -1,14 +1,20 @@
 import { AppError, ErrorCode } from '../errors.js';
+import { PARTICIPANT_NAME_PATTERN, REPEATED_SPACES_PATTERN } from './patterns.js';
 
-// 1-20 letters/digits only — no spaces, punctuation, or other symbols.
-const PARTICIPANT_NAME_PATTERN = /^[A-Za-z0-9]{1,20}$/;
+const MAX_NAME_LENGTH = 20;
 
-// Throws INVALID_NAME if the name doesn't match the allowed pattern above.
+// Trims the ends and collapses runs of spaces, so stray whitespace is never
+// what fails. What comes back is what gets validated and stored.
+export function normalizeParticipantName(name: string): string {
+  return name.trim().replace(REPEATED_SPACES_PATTERN, ' ');
+}
+
+// Throws INVALID_NAME if the name doesn't match PARTICIPANT_NAME_PATTERN.
 export function validateParticipantName(name: string): void {
-  if (!PARTICIPANT_NAME_PATTERN.test(name)) {
+  if (name.length > MAX_NAME_LENGTH || !PARTICIPANT_NAME_PATTERN.test(name)) {
     throw new AppError(
       ErrorCode.InvalidName,
-      'name must be 1-20 alphanumeric characters with no spaces',
+      'name must be 1-20 letters, numbers or spaces, with no symbols',
     );
   }
 }

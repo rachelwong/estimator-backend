@@ -112,7 +112,7 @@ export function generateParticipantId(): string;   // crypto.randomUUID()
 #### `src/utils/validation.ts`
 
 ```ts
-export function validateParticipantName(name: string): void;  // /^[A-Za-z0-9]{1,20}$/, throws INVALID_NAME
+export function validateParticipantName(name: string): void;  // /^[A-Za-z0-9]+( [A-Za-z0-9]+)*$/ to 20 chars, throws INVALID_NAME
 ```
 
 **Why**: never trust the client. This is the one place the name rule lives — called from `sessionStore`, not from the route — so both REST's `POST /sessions` and the WS `join` event enforce it identically without either transport needing its own copy.

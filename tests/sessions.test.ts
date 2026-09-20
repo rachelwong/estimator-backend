@@ -56,10 +56,10 @@ describe('POST /sessions', () => {
     expect(body.pointSystem.axisValues).toEqual([0, 1, 2, 3, 5, 8]);
   });
 
-  it('rejects a name with an embedded space as INVALID_NAME', async () => {
+  it('rejects a name carrying a symbol as INVALID_NAME', async () => {
     const app = createApp(testConfig);
     const response = await request(app).post('/sessions').send({
-      adminName: 'Jim Bob',
+      adminName: 'Jim@Bob',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
     });
@@ -67,6 +67,19 @@ describe('POST /sessions', () => {
     expect(response.status).toBe(400);
     const body = ErrorResponseSchema.parse(response.body);
     expect(body.error).toBe('INVALID_NAME');
+  });
+
+  it('accepts a name with an embedded space', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).post('/sessions').send({
+      adminName: 'jim bob',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+
+    expect(response.status).toBe(201);
+    const body = CreateSessionResponseSchema.parse(response.body);
+    expect(body.adminName).toBe('Jim Bob');
   });
 
   it('rejects an over-ceiling sliderMax as INVALID_SLIDER_MAX', async () => {

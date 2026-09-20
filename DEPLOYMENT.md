@@ -103,14 +103,15 @@ neither repo owns the sequence. Edit both, or they drift.
       right axis values, and the response carries
       `access-control-allow-origin: https://estimator-frontend-ashen.vercel.app`.
 - [ ] R9. Render → Logs shows the service listening, with no boot errors.
-- [ ] R10. Settings → Build Filters → Ignored Paths: `**/*.md`. Auto-deploy
+- [x] R10. Settings → Build Filters → Ignored Paths: `**/*.md`. Auto-deploy
       swaps the instance on every push to `master`, and the swap wipes every
       in-memory session (`sessionStore.ts`), so a docs-only commit can end a
       Session in progress. Observed on 2026-09-20: a push at 10:08:04 dropped
       two sessions 43 seconds later, while a 10-minute poll had shown the
       instance perfectly stable. Setting this in `render.yaml` alone does
       nothing (see the note above) — it has to be the dashboard. While actively
-      testing, Auto-Deploy → off is the blunter version.
+      testing, Auto-Deploy → off is the blunter version. Set on 2026-09-20 as
+      both `*.md` and `**/*.md`, matching `render.yaml`.
 
 ---
 
@@ -188,8 +189,20 @@ neither repo owns the sequence. Edit both, or they drift.
 - [ ] F11. Both profiles pick Squares, Admin ends the Session: both tabs move to
       `/ended` without a refresh, and the Reveal is right.
 - [ ] F12. A nonsense session id goes to `/not-found`.
-- [ ] F13. Optional: `SMOKE_APP_URL=… SMOKE_API_URL=… npm run smoke` against
-      production.
+- [x] F13. Optional: `SMOKE_APP_URL=… SMOKE_API_URL=… npm run smoke` against
+      production. Run 2026-09-20: every check that describes the *deployed*
+      bundle passed. Two caveats worth keeping:
+      - F1c only got half the job done. `APP` and `API` moved to env vars, but
+        `join.mjs` still matched `localhost:3001` in both `routeWebSocket` and
+        `route`, so the forged-Selection interceptors never fired against
+        production — the click landed as an ordinary Selection, no banner
+        appeared, and the Dismiss click timed out 30s later. `session.mjs` had
+        the same bug in its `ws://localhost:3001` traffic filter, where a
+        non-matching filter made "No socket opened" pass for the wrong reason.
+        Both now derive from `SOCKET_HOST`/`SOCKET_IO` in `lib.mjs`.
+      - The suite is versioned with the repo but runs against whatever is
+        deployed, so checks written for unshipped UI fail until it ships. Re-run
+        after a deploy, not before.
 
 ---
 
