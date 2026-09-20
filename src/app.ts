@@ -7,6 +7,9 @@ import { sessionsRouter } from './routes/sessions.js';
 export function createApp(config: Config): Express {
   const app = express();
 
+  app.use(cors({ origin: config.corsOrigin }));
+  app.use(express.json());
+
   // Basic health check so uptime monitors can confirm the server is running.
   // The log line is the service's heartbeat: nothing else here logs a
   // successful request, so without it the log stream stays silent until
@@ -14,13 +17,10 @@ export function createApp(config: Config): Express {
   // minutes that's cheap, and it's what makes a lost session diagnosable — a
   // gap in the heartbeat followed by server.ts's "listening on port" line is a
   // restart (deploy or spin-down) that wiped the in-memory session store.
-  app.all('/healthz', (_req, res) => {
+  app.get('/healthz', (_req, res) => {
     console.log('GET /healthz');
     res.status(200).json({ status: 'ok' });
   });
-
-  app.use(cors({ origin: config.corsOrigin }));
-  app.use(express.json());
 
   // All session-related endpoints (create session, get session, etc.) live under /sessions.
   app.use('/sessions', sessionsRouter);
