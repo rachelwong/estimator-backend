@@ -93,6 +93,8 @@ The estimator-plan.md was the original product plan that used MCPs to pull data 
 
 I also have to configure a cron-job every 10 minutes to keep the Render web service alive. This is because I'm on the free tier and 15 minutes of inactivity will spin down the service and require up to a 1 minute to restore. The 10-minute GET `/healthz` ping keeps the service up and running except for the period between 2am and 6am Sydney time. I am hoping that scoping down the cron-job period will help keep this within Render usage policy.
 
+![Alt Text](public/Render.png)
+
 ## Key learnings
 
 > TL;DR not having backend experience means many of my prompts say `is this best practice`.
@@ -101,11 +103,9 @@ I also have to configure a cron-job every 10 minutes to keep the Render web serv
 - managing usage limits: I'm currently on the lowest Claude Code Pro plan. So this [reddit advice](https://www.reddit.com/r/ClaudeAI/comments/1u7i5ow/pro_tip_reset_your_usage_limits_on_your_schedule/) is relevant: create a Claude Code Routine that runs daily, use Haiku, and just say something like "Hello, just respond with "hello"", 5 hours before you want your usage to reset
 - Current process is Plan mode x grilling skills x human code review
 - configuring memory.md and agents.md brings better quality and _succinct_ responses. I have found wading through paragraphs of text describing code to be a productivity tax to using something that's meant to accelerate it :shrug:.
-- not having backend experience means many of my prompts say `is this best practice`
 - Plan mode and break out the work into phases. Manually review each phase and manually commit is my preferred way to go at the moment, until I can find a way to confidently gatekeep quality.
 - Skills: key things that I have asked Claude Code to do in terms of code conventions were very limited by comparison:
   - avoid magic strings/numbers
-- backend claude experience is very different to the frontend claude experience
 
 ## Roadmap
 
