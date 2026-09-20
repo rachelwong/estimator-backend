@@ -106,6 +106,15 @@ I also have to configure a cron-job every 10 minutes to keep the Render web serv
 - Plan mode and break out the work into phases. Manually review each phase and manually commit is my preferred way to go at the moment, until I can find a way to confidently gatekeep quality.
 - Skills: key things that I have asked Claude Code to do in terms of code conventions were very limited by comparison:
   - avoid magic strings/numbers
+- when Render service spins down after activity the GET `/healthz` call did not successfully wake up the service again at 6am the next day. From research apparently, the cron-job is sending a _HEAD_ instead of _GET_ request. The fix required
+
+```javascript
+// change from app.get to app.all and move above the cors config
+app.all('/healthz', (_req, res) => {
+  console.log('GET /healthz');
+  res.status(200).json({ status: 'ok' });
+});
+```
 
 ## Roadmap
 
