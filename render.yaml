@@ -9,6 +9,19 @@ services:
     startCommand: npm run start
     healthCheckPath: /healthz
     autoDeploy: true
+    # Every push to master rebuilds and swaps the instance, and a swap wipes
+    # every in-memory session (see sessionStore.ts) — a docs-only commit
+    # shouldn't be able to end a Session in progress. Intent only, like the rest
+    # of this file: the live service is manual, so this does nothing until it's
+    # set in the dashboard (R10).
+    buildFilter:
+      ignoredPaths:
+        # Both patterns on purpose: every markdown file that has actually
+        # triggered a deploy here (README, PLAN, DEPLOYMENT, CLAUDE,
+        # estimator-plan) sits at the repo root, and a leading `**/` is not
+        # reliably zero-directory. `*.md` covers the root, `**/*.md` the rest.
+        - '*.md'
+        - '**/*.md'
     envVars:
       - key: NODE_ENV
         value: production

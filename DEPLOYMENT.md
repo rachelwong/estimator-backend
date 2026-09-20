@@ -103,6 +103,14 @@ neither repo owns the sequence. Edit both, or they drift.
       right axis values, and the response carries
       `access-control-allow-origin: https://estimator-frontend-ashen.vercel.app`.
 - [ ] R9. Render → Logs shows the service listening, with no boot errors.
+- [ ] R10. Settings → Build Filters → Ignored Paths: `**/*.md`. Auto-deploy
+      swaps the instance on every push to `master`, and the swap wipes every
+      in-memory session (`sessionStore.ts`), so a docs-only commit can end a
+      Session in progress. Observed on 2026-09-20: a push at 10:08:04 dropped
+      two sessions 43 seconds later, while a 10-minute poll had shown the
+      instance perfectly stable. Setting this in `render.yaml` alone does
+      nothing (see the note above) — it has to be the dashboard. While actively
+      testing, Auto-Deploy → off is the blunter version.
 
 ---
 
