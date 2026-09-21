@@ -1,6 +1,8 @@
 # Jira Poker frontend
 
-[https://estimator-frontend-ashen.vercel.app](https://estimator-frontend-ashen.vercel.app)
+[https://fold-and-flip.vercel.app/](https://fold-and-flip.vercel.app/)
+
+Prototype version - [https://estimator-frontend-ashen.vercel.app](https://estimator-frontend-ashen.vercel.app)
 
 This is a blind-poker application for software developers or SaaS teams to discuss tee-sizing any given feature, Jira ticket based on time and resources/complexity. This project was inspired by discussions during sprint planning sessions at work and how different team members contribute differently. I had deliberately not referred to any existing sprint planning tools or tee-shirt sizing tools on the market as this project is a personal response to a work experience. I chose the blind-poker style specifically as an unobstrusive conversation starter and platform to allow all members of the team to visibly and meaningfully contribute towards a sizing activity. Different levels of experience, personality style, involvement with a particular task can impact how sprint planning discussions proceed.
 
