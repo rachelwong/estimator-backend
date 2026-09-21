@@ -17,6 +17,6 @@ export function createIoServer(
 ): Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData> {
   return new Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData>(
     httpServer,
-    { cors: { origin: config.corsOrigin } },
+    { cors: { origin: config.corsOrigins } },
   );
 }

@@ -259,7 +259,7 @@ From `render.yaml`, so confirm rather than retype. Only `CORS_ORIGIN` is typed i
 | Env var       | Value                          | Why                                                                                    |
 | ------------- | ------------------------------ | -------------------------------------------------------------------------------------- |
 | `NODE_ENV`    | `production`                   | Turns on the `CORS_ORIGIN` checks in `loadConfig()`                                    |
-| `CORS_ORIGIN` | `https://<project>.vercel.app` | Exact match. No trailing slash, no path, no `*`. Update it if the frontend URL changes |
+| `CORS_ORIGIN` | `https://<project>.vercel.app` | Comma-separated list of exact origins, one per frontend. Each `https`, no trailing slash, no path, no `*`. Update it if a frontend URL changes |
 | `PORT`        | **don't set**                  | Render injects it; `server.ts` binds what it's given                                   |
 
 No secrets: no database, no API keys, and `adminToken` is generated per Session
@@ -298,7 +298,7 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 - **Preview builds fail the env check, on purpose.** The `VITE_*` values are
   Production-only, so previews throw `VITE_API_BASE_URL must be set for a build`.
   A preview that _did_ build would load and then fail every request at the
-  browser's CORS check, since `CORS_ORIGIN` names only the production domain —
+  browser's CORS check, since `CORS_ORIGIN` names only the production domains —
   a slower, more confusing failure. Preview a branch by running both repos
   locally instead.
 - **Free hours.** Render gives 750 free instance hours a month per workspace;
@@ -321,11 +321,13 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 - **Rollback.** Vercel: Deployments → earlier build → Promote to Production.
   Render: Events → earlier deploy → Rollback (also wipes Sessions).
 - **Protocol changes.** The frontend's `src/types/protocol.ts` mirrors the
-  backend's `src/types.ts` by hand.
-  Deploy the backend first when the change is backward-compatible; otherwise
-  deploy both together, when nobody is mid-Session.
-- **New frontend URL** (rename or custom domain) means updating `CORS_ORIGIN` on
-  Render.
+  backend's `src/types.ts` by hand, and every frontend listed in `CORS_ORIGIN`
+  is a consumer. Deploy the backend first when the change is
+  backward-compatible; otherwise deploy the backend and every frontend
+  together, when nobody is mid-Session.
+- **New frontend URL** (rename, custom domain, or an extra frontend) means
+  updating `CORS_ORIGIN` on Render. It's a comma-separated list; see
+  [docs/features/multi-origin-cors.md](docs/features/multi-origin-cors.md).
 
 ---
 

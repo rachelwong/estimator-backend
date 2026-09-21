@@ -7,7 +7,7 @@ import { sessionsRouter } from './routes/sessions.js';
 export function createApp(config: Config): Express {
   const app = express();
 
-  app.use(cors({ origin: config.corsOrigin }));
+  app.use(cors({ origin: config.corsOrigins }));
   app.use(express.json());
 
   // Basic health check so uptime monitors can confirm the server is running.

@@ -43,6 +43,10 @@ Setting the two-origin value **before** step 1 is live breaks both frontends.
 
 - `corsOrigin: string` → `corsOrigins: string[]`.
 - Split `CORS_ORIGIN` on commas, trim each entry, drop empties.
+- Outside production, an unset value defaults to `LOCAL_DEV_CORS_ORIGIN`.
+  Today an empty string makes `cors` allow **any** origin; an empty array
+  would allow none, so without the default `npm run dev` with no `.env` would
+  start failing CORS.
 - In production, run each existing check **per entry**:
   - list must be non-empty
   - no trailing slash
@@ -52,10 +56,8 @@ Setting the two-origin value **before** step 1 is live breaks both frontends.
   - anything not starting with `https://` (a typo here fails silently in the
     browser, not at boot)
 
-### `src/utils/patterns.ts`
-
-- The comma-split regex (e.g. `/\s*,\s*/`) goes here, not inline, per the
-  repo convention that every production regex lives in this file.
+A plain `split(',')` plus `trim()` needs no regex, so nothing goes in
+`src/utils/patterns.ts`.
 
 ### `src/app.ts` and `src/ws/ioServer.ts`
 
@@ -74,9 +76,10 @@ Setting the two-origin value **before** step 1 is live breaks both frontends.
     still throws in production
 - Rename `corsOrigin` → `corsOrigins` in the `testConfig` objects in
   `tests/handlers.test.ts`, `tests/server.test.ts`, `tests/sessions.test.ts`.
-- New wiring test (in `server.test.ts` or `sessions.test.ts`): with two
-  configured origins, a request from each gets its own origin back in
-  `Access-Control-Allow-Origin`, and an unlisted origin gets no header.
+- New wiring test (in `server.test.ts`): with two configured origins, a
+  request from each gets its own origin back in `Access-Control-Allow-Origin`,
+  and an unlisted origin gets no header — for both `/healthz` (REST) and the
+  Socket.IO polling handshake.
 
 ### Docs
 

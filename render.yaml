@@ -25,7 +25,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      # The Vercel production URL, typed into the dashboard when the service is
-      # created. Not in the repo: it changes with the frontend's domain.
+      # Comma-separated list of the Vercel production origins this backend
+      # serves (https, no trailing slash), typed into the dashboard. Not in the
+      # repo: it changes with the frontends' domains.
       - key: CORS_ORIGIN
         sync: false

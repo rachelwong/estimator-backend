@@ -12,7 +12,7 @@ import { PointSystemType } from '../src/types.js';
 
 const testConfig: Config = {
   port: 0,
-  corsOrigin: 'http://localhost:5173',
+  corsOrigins: ['http://localhost:5173'],
   nodeEnv: 'test',
 };
 

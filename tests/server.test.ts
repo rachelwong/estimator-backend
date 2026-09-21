@@ -1,5 +1,6 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import request from 'supertest';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -20,7 +21,7 @@ type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>
 // mounted (tests/handlers.test.ts). Replaces the old manual
 // scripts/manual-ws-client.mjs smoke test with something that actually runs
 // on every `npm test`, instead of relying on a human remembering to run it.
-const testConfig: Config = { port: 0, corsOrigin: 'http://localhost:5173', nodeEnv: 'test' };
+const testConfig: Config = { port: 0, corsOrigins: ['http://localhost:5173'], nodeEnv: 'test' };
 
 let httpServer: HttpServer;
 let baseUrl: string;
@@ -91,5 +92,107 @@ describe('server composition', () => {
     const getResponse = await fetch(`${baseUrl}/sessions/${session.sessionId}`);
     const getBody = (await getResponse.json()) as { ended: boolean };
     expect(getBody.ended).toBe(true);
+  });
+});
+
+// A two-frontend deployment: each listed origin must get itself back in
+// Access-Control-Allow-Origin on both transports, and an unlisted one nothing.
+// Checked on the real composed server, since app.ts and ioServer.ts each pass
+// the list to a different CORS implementation.
+describe('CORS with multiple origins', () => {
+  const firstOrigin = 'https://first.example.com';
+  const secondOrigin = 'https://second.example.com';
+  const unlistedOrigin = 'https://unlisted.example.com';
+  const multiOriginConfig: Config = {
+    port: 0,
+    corsOrigins: [firstOrigin, secondOrigin],
+    nodeEnv: 'test',
+  };
+  let corsServer: HttpServer;
+
+  beforeEach(() => {
+    corsServer = createServer(createApp(multiOriginConfig));
+    createIoServer(corsServer, multiOriginConfig);
+  });
+
+  const SOCKET_IO_POLLING_PATH = '/socket.io/?EIO=4&transport=polling';
+
+  it.each([
+    ['REST', '/healthz'],
+    ['Socket.IO', SOCKET_IO_POLLING_PATH],
+  ])('%s reflects each listed origin', async (_transport, path) => {
+    const first = await request(corsServer).get(path).set('Origin', firstOrigin);
+    expect(first.headers['access-control-allow-origin']).toBe('https://first.example.com');
+
+    const second = await request(corsServer).get(path).set('Origin', secondOrigin);
+    expect(second.headers['access-control-allow-origin']).toBe('https://second.example.com');
+  });
+
+  it.each([
+    ['REST', '/healthz'],
+    ['Socket.IO', SOCKET_IO_POLLING_PATH],
+  ])('%s sends no allow-origin header for an unlisted origin', async (_transport, path) => {
+    const response = await request(corsServer).get(path).set('Origin', unlistedOrigin);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  // A browser's POST /sessions with a JSON body is preflighted, so creating a
+  // session from either frontend depends on OPTIONS passing too.
+  it('passes the POST /sessions preflight for each listed origin', async () => {
+    for (const [origin, expected] of [
+      [firstOrigin, 'https://first.example.com'],
+      [secondOrigin, 'https://second.example.com'],
+    ]) {
+      const response = await request(corsServer)
+        .options('/sessions')
+        .set('Origin', origin)
+        .set('Access-Control-Request-Method', 'POST')
+        .set('Access-Control-Request-Headers', 'content-type');
+      expect(response.status).toBe(204);
+      expect(response.headers['access-control-allow-origin']).toBe(expected);
+    }
+  });
+});
+
+// Today's deployment, and the value Render holds until the multi-origin change
+// is live: one origin must behave exactly as it did when CORS_ORIGIN was a
+// plain string.
+describe('CORS with a single origin', () => {
+  const onlyOrigin = 'https://only.example.com';
+  const unlistedOrigin = 'https://unlisted.example.com';
+  const singleOriginConfig: Config = { port: 0, corsOrigins: [onlyOrigin], nodeEnv: 'test' };
+  let corsServer: HttpServer;
+
+  beforeEach(() => {
+    corsServer = createServer(createApp(singleOriginConfig));
+    createIoServer(corsServer, singleOriginConfig);
+  });
+
+  const SOCKET_IO_POLLING_PATH = '/socket.io/?EIO=4&transport=polling';
+
+  it.each([
+    ['REST', '/healthz'],
+    ['Socket.IO', SOCKET_IO_POLLING_PATH],
+  ])('%s reflects the listed origin', async (_transport, path) => {
+    const response = await request(corsServer).get(path).set('Origin', onlyOrigin);
+    expect(response.headers['access-control-allow-origin']).toBe('https://only.example.com');
+  });
+
+  it.each([
+    ['REST', '/healthz'],
+    ['Socket.IO', SOCKET_IO_POLLING_PATH],
+  ])('%s sends no allow-origin header for an unlisted origin', async (_transport, path) => {
+    const response = await request(corsServer).get(path).set('Origin', unlistedOrigin);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
+  });
+
+  it('passes the POST /sessions preflight for the listed origin', async () => {
+    const response = await request(corsServer)
+      .options('/sessions')
+      .set('Origin', onlyOrigin)
+      .set('Access-Control-Request-Method', 'POST')
+      .set('Access-Control-Request-Headers', 'content-type');
+    expect(response.status).toBe(204);
+    expect(response.headers['access-control-allow-origin']).toBe('https://only.example.com');
   });
 });

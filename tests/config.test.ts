@@ -15,7 +15,7 @@ describe('loadConfig', () => {
       NODE_ENV: 'development',
     });
     expect(config.port).toBe(4000);
-    expect(config.corsOrigin).toBe('https://example.com');
+    expect(config.corsOrigins).toEqual(['https://example.com']);
     expect(config.nodeEnv).toBe('development');
   });
 
@@ -43,6 +43,74 @@ describe('loadConfig', () => {
     expect(() =>
       loadConfig({ NODE_ENV: 'production', CORS_ORIGIN: 'https://example.com' }),
     ).not.toThrow();
+  });
+
+  it('splits a comma-separated CORS_ORIGIN into a list, trimming whitespace', () => {
+    const config = loadConfig({
+      NODE_ENV: 'production',
+      CORS_ORIGIN: 'https://a.example.com , https://b.example.com',
+    });
+    expect(config.corsOrigins).toEqual(['https://a.example.com', 'https://b.example.com']);
+  });
+
+  it('drops empty entries from CORS_ORIGIN', () => {
+    const config = loadConfig({
+      NODE_ENV: 'production',
+      CORS_ORIGIN: 'https://a.example.com,,https://b.example.com,',
+    });
+    expect(config.corsOrigins).toEqual(['https://a.example.com', 'https://b.example.com']);
+  });
+
+  it('throws in production when CORS_ORIGIN has only commas and whitespace', () => {
+    expect(() => loadConfig({ NODE_ENV: 'production', CORS_ORIGIN: ' , ,' })).toThrow(
+      /must be set/,
+    );
+  });
+
+  it('throws in production when one entry in a list has a trailing slash', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://a.example.com,https://b.example.com/',
+      }),
+    ).toThrow(/trailing slash/);
+  });
+
+  it('throws in production when one entry in a list is the local dev default', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://a.example.com,http://localhost:5173',
+      }),
+    ).toThrow(/local development/);
+  });
+
+  it('throws in production when one entry in a list is "*"', () => {
+    expect(() =>
+      loadConfig({ NODE_ENV: 'production', CORS_ORIGIN: 'https://a.example.com,*' }),
+    ).toThrow(/"\*"/);
+  });
+
+  it('throws in production when one entry in a list is not https', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://a.example.com,http://b.example.com',
+      }),
+    ).toThrow(/https/);
+  });
+
+  it('does not throw in production for a list of valid origins', () => {
+    expect(() =>
+      loadConfig({
+        NODE_ENV: 'production',
+        CORS_ORIGIN: 'https://a.example.com,https://b.example.com',
+      }),
+    ).not.toThrow();
+  });
+
+  it('defaults to the local dev origin when CORS_ORIGIN is unset outside production', () => {
+    expect(loadConfig({ NODE_ENV: 'development' }).corsOrigins).toEqual(['http://localhost:5173']);
   });
 
   it('does not throw when CORS_ORIGIN is unset outside production', () => {

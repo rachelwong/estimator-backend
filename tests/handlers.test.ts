@@ -11,7 +11,7 @@ import { WsEvent, type ClientToServerEvents, type ServerToClientEvents } from '.
 
 type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>;
 
-const testConfig: Config = { port: 0, corsOrigin: 'http://localhost:5173', nodeEnv: 'test' };
+const testConfig: Config = { port: 0, corsOrigins: ['http://localhost:5173'], nodeEnv: 'test' };
 
 let httpServer: HttpServer;
 let baseUrl: string;
