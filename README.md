@@ -104,7 +104,7 @@ The estimator-plan.md was the original product plan that used MCPs to pull data 
 
 Extended the `CORS_ORIGIN` for both the final deployed project and the working prototype.
 
-I also have to configure a cron-job every 10 minutes to keep the Render web service alive. This is because I'm on the free tier and 15 minutes of inactivity will spin down the service and require up to a 1 minute to restore. The 10-minute GET `/healthz` ping keeps the service up and running except for the period between 2am and 6am Sydney time. I am hoping that scoping down the cron-job period will help keep this within Render usage policy.
+I also have to configure a cron-job every 13 minutes to keep the Render web service alive. This is because I'm on the free tier and 15 minutes of inactivity will spin down the service and require up to a 1 minute to restore. The 13-minute GET `/healthz` ping keeps the service up and running. ~~except for the period between 2am and 6am Sydney time. I am hoping that scoping down the cron-job period will help keep this within Render usage policy.~~
 
 ![Alt Text](public/Render.png)
 
