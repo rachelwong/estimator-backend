@@ -58,7 +58,9 @@ GET /healthz
 ```
 
 One line, no detail — Render stamps its own timestamp on each line. The
-keep-alive job pings every 10 minutes, so this is about 144 lines a day.
+keep-alive job pings every 13 minutes (24/7 since 2026-09-23; it was every 10
+minutes with a 2am–6am pause when this was written), so this is about 110 lines
+a day.
 
 **2. A build filter, so docs pushes stop restarting the server**
 (`render.yaml`, and `DEPLOYMENT.md` R10)
@@ -77,12 +79,12 @@ the ping reached the app rather than a cache — useful before the logs catch up
 
 ## How to read the logs now
 
-A healthy service is a line every 10 minutes:
+A healthy service is a line every 13 minutes:
 
 ```
 10:00:12  GET /healthz
-10:10:14  GET /healthz
-10:20:11  GET /healthz
+10:13:14  GET /healthz
+10:26:11  GET /healthz
 ```
 
 A restart is a gap, then the startup line:

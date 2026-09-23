@@ -210,15 +210,19 @@ neither repo owns the sequence. Edit both, or they drift.
 
 Render's free tier sleeps after 15 minutes with no inbound HTTP traffic, and a
 socket doesn't count — so a Session in progress can be put to sleep. Pinging
-every 10 minutes keeps the gap under 15 even if one ping runs late.
+every 13 minutes keeps the gap under 15.
 
 - [ ] C1. Create a job: `GET https://estimator-backend-1nf2.onrender.com/healthz`,
-      every 10 minutes, **paused 2am–6am**: `*/10 0-1,6-23 * * *`, timezone
-      `Australia/Sydney` (cron-job.org handles DST). 24/7 would be 744 of the
-      750 free hours in a 31-day month — it fits, but with no margin, and
-      running out suspends the service until the next reset. 4 hours down lands
-      ~620 hours and only costs a cold start to a 2–6am Session, which doesn't
-      happen.
+      every 13 minutes, **24/7**: `*/13 * * * *`. The earlier 2am–6am pause
+      (`*/10 0-1,6-23 * * *`, timezone `Australia/Sydney`) was removed on
+      2026-09-23 — running around the clock is ~744 of the 750 free hours in a
+      31-day month. It fits, but the ~6-hour margin is the thing to watch:
+      running out suspends the service until the next reset. Restore a nightly
+      pause if that margin ever gets tight.
+      **Consequence for sessions:** with no nightly spin-down, the process now
+      only restarts on a deploy, so in-memory sessions are never cleared
+      overnight — see `docs/features/session-ttl.md` for the TTL that bounds
+      them instead.
 - [ ] C2. Timeout: the maximum allowed. The first ping after a sleep can take
       30–60 seconds.
 - [ ] C3. Failure notifications: on. A run of failures means the backend is
@@ -338,7 +342,7 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 | Deploy the backend first, "`CORS_ORIGIN` doesn't matter yet"   | Import the frontend first, for its URL  | `loadConfig()` throws when it's unset in production, so that deploy would fail its health check |
 | `buildCommand: npm install && npm run build`                   | `npm ci --include=dev && npm run build` | Otherwise `tsc` isn't installed. `npm ci` also honours the lockfile                             |
 | Vercel env vars on Production and Preview                      | Production only                         | Preview origins are blocked by CORS anyway                                                      |
-| Spin-down accepted; create the Session just before the meeting | A 10-minute keep-alive ping             | Removes both the cold start and the mid-Session sleep that drops sockets                        |
+| Spin-down accepted; create the Session just before the meeting | A 13-minute keep-alive ping, 24/7       | Removes both the cold start and the mid-Session sleep that drops sockets                        |
 
 ## Out of scope
 
