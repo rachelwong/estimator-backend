@@ -13,6 +13,43 @@ import { normalizeParticipantName, validateParticipantName } from './utils/valid
 
 const sessions = new Map<string, SessionState>();
 
+// How long a session outlives the last thing that happened to it. A domain
+// rule rather than deployment config, so it lives here and not in config.ts —
+// tuning either is a one-line change, with no env override to keep in sync.
+export const ENDED_SESSION_TTL_MS = 60 * 60 * 1000;
+export const OPEN_SESSION_TTL_MS = 90 * 60 * 1000;
+export const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
+
+// An ended session's clock runs from endedAt, never lastActivityAt, so ending
+// a session restarts the countdown instead of inheriting the last vote's.
+// Exactly at the TTL is still alive; a millisecond past it isn't.
+function isExpired(session: SessionState, now: Date): boolean {
+  if (session.ended && session.endedAt) {
+    return now.getTime() - session.endedAt.getTime() > ENDED_SESSION_TTL_MS;
+  }
+  return now.getTime() - session.lastActivityAt.getTime() > OPEN_SESSION_TTL_MS;
+}
+
+// The one lookup every other function in this file goes through: an expired
+// session is reported missing from the moment its TTL passes, so nothing is
+// ever served past it however far away the next sweep is, and no caller needs
+// its own expiry check. An expired session reads exactly like one that never
+// existed — never tombstoned, never half-served.
+//
+// It deliberately does NOT delete the entry on the way past. sweepExpiredSessions
+// is the single place a session is removed, and the sweeper disconnects the
+// sockets still sitting in a removed session's room; deleting here would take
+// the id out of the Map before any sweep saw it, stranding those sockets on a
+// session that no longer exists. The entry outlives its TTL by at most one sweep
+// interval, which was already true of every session nobody reads.
+function findLiveSession(sessionId: string): SessionState | undefined {
+  const session = sessions.get(sessionId);
+  if (!session || isExpired(session, new Date())) {
+    return undefined;
+  }
+  return session;
+}
+
 // Normalizes a raw name's whitespace, validates it, then capitalizes each word
 // (first letter upper, rest lower) so every stored name is display-ready.
 // Per word, not per name: "jim bob" is "Jim Bob", not "Jim bob".
@@ -48,9 +85,10 @@ function makeUniqueName(session: SessionState, baseName: string): string {
   return candidateName;
 }
 
-// Looks up a session by id, or throws UNKNOWN_SESSION if it doesn't exist.
+// Looks up a session by id, or throws UNKNOWN_SESSION if it doesn't exist
+// (or has expired, which amounts to the same thing).
 function getSessionOrThrow(sessionId: string): SessionState {
-  const session = sessions.get(sessionId);
+  const session = findLiveSession(sessionId);
   if (!session) {
     throw new AppError(ErrorCode.UnknownSession, `No session found with id "${sessionId}"`);
   }
@@ -90,6 +128,8 @@ export function createSession({
   const participants = new Map<string, Participant>();
   participants.set(adminParticipantId, admin);
 
+  // Creating a session is itself activity, so both clocks start together.
+  const createdAt = new Date();
   const session: SessionState = {
     id: sessionId,
     adminToken: generateAdminToken(),
@@ -97,7 +137,8 @@ export function createSession({
     pointSystem: { type: pointSystemType, sliderMax, axisValues },
     participants,
     ended: false,
-    createdAt: new Date(),
+    createdAt,
+    lastActivityAt: createdAt,
     endedAt: null,
   };
 
@@ -106,9 +147,41 @@ export function createSession({
 }
 
 // Plain lookup for a session by id — returns undefined instead of throwing
-// if it doesn't exist, leaving the "not found" decision to the caller.
+// if it doesn't exist (or has expired), leaving the "not found" decision to
+// the caller. A read is not activity: looking at a session, over REST or from
+// a monitor, never postpones its deletion.
 export function getSession(sessionId: string): SessionState | undefined {
-  return sessions.get(sessionId);
+  return findLiveSession(sessionId);
+}
+
+// Resets an open session's clock because somebody opened it — a socket
+// connecting, which is a refresh, a latecomer or a second tab. Deliberately a
+// named write rather than a side effect hidden inside getSession, since every
+// other lookup here is expected to leave the clock alone. Ignored for an ended
+// session, whose clock is endedAt, and for one that's already gone.
+export function touchSession(sessionId: string): void {
+  const session = findLiveSession(sessionId);
+  if (!session || session.ended) {
+    return;
+  }
+  session.lastActivityAt = new Date();
+}
+
+// Deletes every session whose TTL has passed and returns their ids, so the
+// caller (ws/sessionSweeper.ts) can evict the sockets still sitting in their
+// rooms. This is the only place a session is ever removed: lookups above stop
+// serving one the instant it expires (which is what makes the deadline exact)
+// but leave the entry here, so every removal goes out through the one path that
+// also disconnects its sockets.
+export function sweepExpiredSessions(now: Date = new Date()): string[] {
+  const expiredSessionIds: string[] = [];
+  for (const [sessionId, session] of sessions) {
+    if (isExpired(session, now)) {
+      sessions.delete(sessionId);
+      expiredSessionIds.push(sessionId);
+    }
+  }
+  return expiredSessionIds;
 }
 
 // Adds a new (non-admin) participant to a session: rejects if the session has
@@ -131,6 +204,9 @@ export function addParticipant(sessionId: string, name: string): Participant {
   };
 
   session.participants.set(participant.id, participant);
+  // Set only once the join has actually succeeded — a rejected name is not
+  // activity and must not postpone the session's deletion.
+  session.lastActivityAt = new Date();
   return participant;
 }
 
@@ -171,6 +247,9 @@ export function selectSquare(
     currentSelection.time === time &&
     currentSelection.resource === resource;
   participant.selection = isSameSelection ? null : ({ time, resource } satisfies Selection);
+  // As in addParticipant: only a vote that passed every check counts as
+  // activity.
+  session.lastActivityAt = new Date();
 }
 
 // Confirms the given token is the session's real admin token, throwing

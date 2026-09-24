@@ -31,6 +31,10 @@ export interface SessionState {
   participants: Map<string, Participant>;
   ended: boolean;
   createdAt: Date;
+  // When somebody last did something to this session — created it, joined it,
+  // voted in it, or opened it. It's what an open session's TTL counts from; an
+  // ended session counts from endedAt instead.
+  lastActivityAt: Date;
   endedAt: Date | null;
 }
 

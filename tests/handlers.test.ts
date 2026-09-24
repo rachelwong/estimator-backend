@@ -1,7 +1,7 @@
 import { createServer, type Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
 import { createSession, endSession, resetSessionStore, selectSquare } from '../src/sessionStore.js';
 import { PointSystemType } from '../src/types.js';
@@ -93,6 +93,30 @@ describe('connection', () => {
 
     const info = await waitForEvent<{ ended: boolean }>(client, WsEvent.SessionInfo);
     expect(info.ended).toBe(true);
+  });
+});
+
+describe('connection activity', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('resets the session clock when a socket connects, so an open tab keeps it alive', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    // Only Date is faked: the socket server and client need their real
+    // setTimeout/setInterval to complete a connection at all.
+    const connectedAt = session.lastActivityAt.getTime() + 10 * 60 * 1000;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(connectedAt);
+
+    const client = connectClient(session.id);
+    await waitForEvent(client, WsEvent.SessionInfo);
+
+    expect(session.lastActivityAt.getTime()).toBe(connectedAt);
   });
 });
 
