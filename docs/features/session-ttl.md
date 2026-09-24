@@ -98,7 +98,7 @@ what happens in the awkward cases. Plain English and diagrams, no code walkthrou
 
 ---
 
-# Part 1 — Session TTL ✅ Built (not yet deployed)
+# Part 1 — Session TTL
 
 ## The problem
 

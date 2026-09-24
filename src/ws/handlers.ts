@@ -1,3 +1,4 @@
+import type { DefaultEventsMap, Server, Socket } from 'socket.io';
 import { AppError, ErrorCode } from '../errors.js';
 import type { SessionState } from '../types.js';
 import {
@@ -5,10 +6,17 @@ import {
   endSession,
   getSession,
   selectSquare,
-  touchSession,
   validateAdminToken,
 } from '../sessionStore.js';
-import { WsEvent, type AppServer, type AppSocket } from './events.js';
+import {
+  WsEvent,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+  type SocketData,
+} from './events.js';
+
+type AppServer = Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData>;
+type AppSocket = Socket<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData>;
 
 function readSessionId(socket: AppSocket): string | undefined {
   const { sessionId } = socket.handshake.query;
@@ -134,11 +142,6 @@ export function registerSocketHandlers(io: AppServer): void {
     }
 
     void socket.join(session.id);
-    // Opening a session counts as activity, not just voting: in a real meeting
-    // everyone votes in the first ten minutes and then talks for an hour, so a
-    // vote-only clock would delete the session out from under the discussion.
-    // A refresh, a latecomer or a second tab all keep it alive.
-    touchSession(session.id);
     socket.emit(WsEvent.SessionInfo, {
       sessionId: session.id,
       pointSystem: session.pointSystem,
@@ -148,8 +151,6 @@ export function registerSocketHandlers(io: AppServer): void {
     socket.on(WsEvent.Join, (name) => handleJoin(socket, session, name));
     socket.on(WsEvent.AdminAuth, (adminToken) => handleAdminAuth(socket, session, adminToken));
     socket.on(WsEvent.SelectSquare, (payload) => handleSelectSquare(socket, session, payload));
-    socket.on(WsEvent.EndSession, (adminToken) =>
-      handleEndSession(io, socket, session, adminToken),
-    );
+    socket.on(WsEvent.EndSession, (adminToken) => handleEndSession(io, socket, session, adminToken));
   });
 }

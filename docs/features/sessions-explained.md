@@ -156,7 +156,7 @@ reopening, and no second round in the same session.
 **Gone.** The server has deleted it. The link now behaves exactly as if it never
 existed: a "not found" page. This is deliberate — see *Where a session is kept*.
 
-## 6. How long a session lasts
+## 6. How long a session lasts **(pending)**
 
 | Situation | How long the server keeps it |
 | --------- | ---------------------------- |
@@ -307,7 +307,7 @@ remembered for that connection only.
 **A deploy lands mid-session.** Everything is lost for everyone, immediately. The
 only mitigation is timing.
 
-**The team talks for more than 1.5 hours without touching a tab.**
+**The team talks for more than 1.5 hours without touching a tab.** **(pending)**
 The session is deleted mid-meeting. Refreshing any tab during the discussion
 prevents it. If this ever happens in practice, the limit is one number and can be
 raised.
@@ -352,7 +352,7 @@ the connection to A stays open in the background until you close the tab.
 - **Each session's clock runs on its own.** Being busy in B does nothing for A.
   If nobody opens, joins or votes in A for 1.5 hours, A is deleted even though
   you're actively using the app in another tab. If you're parking a session while
-  you deal with another, refresh its tab occasionally.
+  you deal with another, refresh its tab occasionally. **(pending)**
 - **A second tab on the *same* session is a different story.** If you open the
   same link again and type your name, you become a *second person* — and both of
   you show up at the reveal, with whatever each had voted. The admin is the
