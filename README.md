@@ -94,6 +94,7 @@ The estimator-plan.md was the original product plan that used MCPs to pull data 
 ### Features
 
 - routes to create, and get a session
+- sessions expire on their own: 1 hour after the reveal, or 1.5 hours after an open session was last opened, joined or voted in (see `docs/features/session-ttl.md`)
 
 ### Tech stack
 

@@ -6,6 +6,8 @@ Backend for a "Jira poker" estimation tool: participants vote on a 2D time × re
 
 [sessionStore.ts](src/sessionStore.ts) holds every session in a module-level `Map`. No database, no persistence — a restart wipes all sessions, and there is no support for running more than one instance (a second process would have its own empty `Map`, so a client's REST/WS traffic must land on the same process every time). Don't assume sessions survive a deploy or scale horizontally without changing this.
 
+Sessions also expire on their own, on top of being wiped by restarts: an ended one is deleted 1 hour after `endedAt`, an open one 1.5 hours after `lastActivityAt` (creating, joining, voting, and a socket connecting all reset that clock; a pure read never does). `getSession`/`getSessionOrThrow` delete an expired entry on lookup, so the deadline is exact, and [ws/sessionSweeper.ts](src/ws/sessionSweeper.ts)'s one-minute timer clears out the sessions nobody looks at again and disconnects any sockets still in them. An expired session is deleted outright, never tombstoned — it reads exactly like one that never existed (`404`/`UNKNOWN_SESSION`). See [docs/features/session-ttl.md](docs/features/session-ttl.md).
+
 ## Composition root
 
 [server.ts](src/server.ts) is the only file that calls `.listen()`. It wires together `createApp` ([app.ts](src/app.ts)), `createIoServer` ([ws/ioServer.ts](src/ws/ioServer.ts)), and `registerSocketHandlers` ([ws/handlers.ts](src/ws/handlers.ts)) on one shared `http.Server`. Everything else is importable and testable without a listening socket — tests build the same pieces directly instead of spawning `server.ts`.

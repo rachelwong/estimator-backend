@@ -221,8 +221,9 @@ every 13 minutes keeps the gap under 15.
       pause if that margin ever gets tight.
       **Consequence for sessions:** with no nightly spin-down, the process now
       only restarts on a deploy, so in-memory sessions are never cleared
-      overnight — see `docs/features/session-ttl.md` for the TTL that bounds
-      them instead.
+      overnight. The backend's own TTL bounds them instead — 1 hour after a
+      Session ends, 1.5 hours after an open one was last touched (see
+      `docs/features/session-ttl.md`).
 - [ ] C2. Timeout: the maximum allowed. The first ping after a sleep can take
       30–60 seconds.
 - [ ] C3. Failure notifications: on. A run of failures means the backend is
@@ -320,6 +321,10 @@ URLs, not credentials. Nothing secret can ever go in a `VITE_*` variable.
 
 - **Any backend deploy wipes every Session.** State is in memory only. Push
   backend changes when nobody is mid-Session.
+- **Sessions expire by themselves too.** A Session's link stops working 1 hour
+  after the reveal, or 1.5 hours after an open Session was last opened, joined
+  or voted in — it then reads as "not found", the same as an id that never
+  existed. A deploy is no longer the only thing that clears memory.
 - **Slow loads or dropped Sessions?** Check the cron job's history first. A
   paused or failing job means Render is sleeping again.
 - **Rollback.** Vercel: Deployments → earlier build → Promote to Production.
