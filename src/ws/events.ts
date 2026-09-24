@@ -1,3 +1,4 @@
+import type { DefaultEventsMap, Server, Socket } from 'socket.io';
 import type { ErrorCode } from '../errors.js';
 import type { PointSystem, RevealPayload, Selection } from '../types.js';
 
@@ -55,3 +56,19 @@ export interface ServerToClientEvents {
   [WsEvent.SessionEnded]: (payload: RevealPayload) => void;
   [WsEvent.Error]: (payload: { error?: ErrorCode; message: string }) => void;
 }
+
+// This app's Socket.IO server and socket, with the four generics filled in
+// once. Declared here, alongside the event maps they're built from, so every
+// file in ws/ names the same type instead of re-spelling the generics.
+export type AppServer = Server<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  DefaultEventsMap,
+  SocketData
+>;
+export type AppSocket = Socket<
+  ClientToServerEvents,
+  ServerToClientEvents,
+  DefaultEventsMap,
+  SocketData
+>;

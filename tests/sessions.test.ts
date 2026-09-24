@@ -1,5 +1,5 @@
 import request from 'supertest';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Config } from '../src/config.js';
 import {
@@ -18,6 +18,10 @@ const testConfig: Config = {
 
 beforeEach(() => {
   resetSessionStore();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('GET /healthz', () => {
@@ -170,6 +174,28 @@ describe('GET /sessions/:id', () => {
     expect(body.ended).toBe(true);
     expect(body.reveal).toBeDefined();
     expect((response.body as Record<string, unknown>).adminToken).toBeUndefined();
+  });
+
+  // An expired session is deleted outright, so over REST it is exactly the
+  // 404 an id that never existed gets — no "expired" variant to tell apart.
+  it('returns 404 UNKNOWN_SESSION once the session has expired', async () => {
+    const app = createApp(testConfig);
+    const createdResponse = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const created = CreateSessionResponseSchema.parse(createdResponse.body);
+    const justPastOpenTtl = new Date(Date.now() + 90 * 60 * 1000 + 1);
+
+    // Only Date is faked — supertest still needs its real timers.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(justPastOpenTtl);
+    const response = await request(app).get(`/sessions/${created.sessionId}`);
+
+    expect(response.status).toBe(404);
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.error).toBe('UNKNOWN_SESSION');
   });
 
   it('returns 404 UNKNOWN_SESSION for an id that was never created', async () => {
