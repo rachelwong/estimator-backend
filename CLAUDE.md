@@ -24,8 +24,8 @@ This project is ESM (`"type": "module"`, NodeNext resolution). [utils/id.ts](src
 
 [errors.ts](src/errors.ts) defines `AppError` (a `code` from `ErrorCode` + a `message`) and `ERROR_HTTP_STATUS`, the one source of truth for both transports:
 
-- REST: [middleware/errorHandler.ts](src/middleware/errorHandler.ts) catches a thrown `AppError`, looks up its status, and responds `{ error: code, message }`. A `ZodError` maps to `INVALID_REQUEST`/400. Anything else is an unexpected bug — generic 500, no leaked internals.
-- WS: `withErrorHandling` in [ws/handlers.ts](src/ws/handlers.ts) gives the same two-tier treatment — a caught `AppError` becomes `socket.emit('error', { error: code, message })`; anything else logs the full error server-side and emits `INTERNAL_ERROR` with a generic message to the client.
+- REST: [middleware/errorHandler.ts](src/middleware/errorHandler.ts) catches a thrown `AppError`, looks up its status, and responds `{ error: code, message }`. A `ZodError` (message formatted by `formatZodError`), or body-parser rejecting an oversized/malformed body, maps to `INVALID_REQUEST`/400. Anything else is an unexpected bug — generic 500, no leaked internals.
+- WS: `withErrorHandling` in [ws/handlers.ts](src/ws/handlers.ts) gives the same treatment — a caught `AppError` becomes `socket.emit('error', { error: code, message })`, and a `ZodError` from parsing a payload against [ws/schemas.ts](src/ws/schemas.ts) becomes `INVALID_REQUEST`; anything else logs the full error server-side and emits `INTERNAL_ERROR` with a generic message to the client.
 
 Domain code (`sessionStore.ts`, `pointSystems.ts`) throws `AppError` and never touches Express or Socket.IO response objects directly — that's what keeps the two adapters this thin. Privileged actions (`end-session`) re-validate the admin token on every call, even for an already-authenticated socket — there's no "already trusted" shortcut (see comment at [ws/handlers.ts:107-110](src/ws/handlers.ts#L107-L110)).
 
