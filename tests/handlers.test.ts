@@ -6,7 +6,7 @@ import type { Config } from '../src/config.js';
 import { createSession, endSession, resetSessionStore, selectSquare } from '../src/sessionStore.js';
 import { PointSystemType } from '../src/types.js';
 import { registerSocketHandlers } from '../src/ws/handlers.js';
-import { createIoServer } from '../src/ws/ioServer.js';
+import { createIoServer, MAX_SOCKET_MESSAGE_BYTES } from '../src/ws/ioServer.js';
 import { WsEvent, type ClientToServerEvents, type ServerToClientEvents } from '../src/ws/events.js';
 
 type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>;
@@ -344,6 +344,154 @@ describe('select-square', () => {
     const errorPayload = await errorPromise;
 
     expect(errorPayload.error).toBe('SESSION_ENDED');
+  });
+});
+
+// A client can send any payload, whatever the types say. A bad one should get
+// INVALID_REQUEST and leave the session unchanged.
+describe('malformed payloads', () => {
+  // Sends a payload without type checks, so tests can send invalid data.
+  function emitRaw(client: ClientSocket, event: string, payload: unknown): void {
+    (client as unknown as { emit: (event: string, payload: unknown) => void }).emit(event, payload);
+  }
+
+  async function connectedClient(sessionId: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    return client;
+  }
+
+  it('rejects a join whose name is not a string with INVALID_REQUEST, adding no participant', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = await connectedClient(session.id);
+
+    const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+    emitRaw(client, WsEvent.Join, { name: 'Mary' });
+    const errorPayload = await errorPromise;
+
+    expect(errorPayload.error).toBe('INVALID_REQUEST');
+    expect(session.participants.size).toBe(1);
+  });
+
+  it('rejects an admin-auth whose token is not a string with INVALID_REQUEST, leaving the socket unidentified', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = await connectedClient(session.id);
+
+    const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+    emitRaw(client, WsEvent.AdminAuth, 42);
+    const errorPayload = await errorPromise;
+    expect(errorPayload.error).toBe('INVALID_REQUEST');
+
+    // The socket still isn't identified, so voting gets the "no participant" error.
+    const voteErrorPromise = waitForEvent<{ error?: string }>(client, WsEvent.Error);
+    client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    const voteError = await voteErrorPromise;
+    expect(voteError.error).toBeUndefined();
+  });
+
+  it.each([
+    ['coordinates as strings', { time: '3', resource: '2' }],
+    ['a missing coordinate', { time: 3 }],
+    ['an extra key', { time: 3, resource: 2, participantId: 'someone-else' }],
+    ['no object at all', 'square'],
+  ])(
+    'rejects a select-square with %s as INVALID_REQUEST, recording no vote',
+    async (_case, payload) => {
+      const session = createSession({
+        adminName: 'Jim',
+        pointSystemType: PointSystemType.Numerical,
+        sliderMax: 5,
+      });
+      const client = await connectedClient(session.id);
+      const ackPromise = waitForEvent(client, WsEvent.AdminAcknowledged);
+      client.emit(WsEvent.AdminAuth, session.adminToken);
+      await ackPromise;
+
+      const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+      emitRaw(client, WsEvent.SelectSquare, payload);
+      const errorPayload = await errorPromise;
+
+      expect(errorPayload.error).toBe('INVALID_REQUEST');
+      expect(session.participants.get(session.adminParticipantId)!.selection).toBeNull();
+    },
+  );
+
+  it('rejects an end-session whose token is not a string with INVALID_REQUEST, leaving the session open', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = await connectedClient(session.id);
+
+    const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+    emitRaw(client, WsEvent.EndSession, [session.adminToken]);
+    const errorPayload = await errorPromise;
+
+    expect(errorPayload.error).toBe('INVALID_REQUEST');
+    expect(session.ended).toBe(false);
+  });
+
+  it('reports which field was wrong in a readable message, not a JSON blob', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = await connectedClient(session.id);
+    const ackPromise = waitForEvent(client, WsEvent.AdminAcknowledged);
+    client.emit(WsEvent.AdminAuth, session.adminToken);
+    await ackPromise;
+
+    const errorPromise = waitForEvent<{ message: string }>(client, WsEvent.Error);
+    emitRaw(client, WsEvent.SelectSquare, { time: 3, resource: '2' });
+    const errorPayload = await errorPromise;
+
+    expect(errorPayload.message).toBe('resource: Invalid input: expected number, received string');
+  });
+});
+
+describe('message size limit', () => {
+  it('disconnects a client that sends a message over the size limit', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = connectClient(session.id);
+    await waitForEvent(client, WsEvent.SessionInfo);
+
+    const disconnectPromise = waitForEvent(client, 'disconnect');
+    client.emit(WsEvent.Join, 'x'.repeat(MAX_SOCKET_MESSAGE_BYTES + 1));
+    await disconnectPromise;
+
+    expect(session.participants.size).toBe(1);
+  });
+
+  // The limit counts the whole packet, not just the name, so stay a bit under it.
+  it('still handles a message just under the size limit, answering rather than disconnecting', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const client = connectClient(session.id);
+    await waitForEvent(client, WsEvent.SessionInfo);
+
+    const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+    client.emit(WsEvent.Join, 'x'.repeat(MAX_SOCKET_MESSAGE_BYTES - 100));
+    const errorPayload = await errorPromise;
+
+    expect(errorPayload.error).toBe('INVALID_NAME');
+    expect(client.connected).toBe(true);
   });
 });
 

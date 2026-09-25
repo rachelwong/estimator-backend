@@ -111,6 +111,19 @@ describe('POST /sessions', () => {
     expect(body.error).toBe('INVALID_REQUEST');
   });
 
+  it('names every invalid field in one readable message, not a JSON blob of issues', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).post('/sessions').send({
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: '5',
+    });
+
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.message).toBe(
+      'adminName: Invalid input: expected string, received undefined; sliderMax: Invalid input: expected number, received string',
+    );
+  });
+
   it('rejects a sliderMax sent as a string as INVALID_REQUEST', async () => {
     const app = createApp(testConfig);
     const response = await request(app).post('/sessions').send({
@@ -135,6 +148,64 @@ describe('POST /sessions', () => {
     expect(response.status).toBe(400);
     const body = ErrorResponseSchema.parse(response.body);
     expect(body.error).toBe('INVALID_REQUEST');
+  });
+});
+
+describe('request body limits', () => {
+  const JSON_BODY_LIMIT_BYTES = 8 * 1024;
+
+  // A valid body padded to exactly `totalBytes`. The extra key is ignored, so
+  // only the size can cause a rejection.
+  function paddedBody(totalBytes: number): string {
+    const base = { adminName: 'Jim', pointSystemType: PointSystemType.Numerical, sliderMax: 5 };
+    const overhead = JSON.stringify({ ...base, padding: '' }).length;
+    const body = JSON.stringify({ ...base, padding: 'x'.repeat(totalBytes - overhead) });
+    expect(body.length).toBe(totalBytes);
+    return body;
+  }
+
+  it('accepts a body of exactly 8kb', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app)
+      .post('/sessions')
+      .set('Content-Type', 'application/json')
+      .send(paddedBody(JSON_BODY_LIMIT_BYTES));
+
+    expect(response.status).toBe(201);
+  });
+
+  it('rejects a body one byte over 8kb as INVALID_REQUEST, not a 500', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app)
+      .post('/sessions')
+      .set('Content-Type', 'application/json')
+      .send(paddedBody(JSON_BODY_LIMIT_BYTES + 1));
+
+    expect(response.status).toBe(400);
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.error).toBe('INVALID_REQUEST');
+  });
+
+  it('rejects malformed JSON as INVALID_REQUEST, not a 500', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app)
+      .post('/sessions')
+      .set('Content-Type', 'application/json')
+      .send('{"adminName": "Jim",');
+
+    expect(response.status).toBe(400);
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.error).toBe('INVALID_REQUEST');
+  });
+});
+
+describe('security headers', () => {
+  it('sends helmet headers and no x-powered-by', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).get('/healthz');
+
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-powered-by']).toBeUndefined();
   });
 });
 

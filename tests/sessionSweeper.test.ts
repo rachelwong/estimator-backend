@@ -55,7 +55,9 @@ afterEach(async () => {
   for (const client of openClients.splice(0)) {
     client.close();
   }
-  await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  // Use io.close(), not httpServer.close(). httpServer.close() waits for open
+  // connections to finish, and here it sometimes hung until the 10s timeout.
+  await io.close();
 });
 
 async function connectedClient(sessionId: string): Promise<ClientSocket> {
@@ -109,7 +111,7 @@ describe('startSessionSweeper', () => {
     expect(client.connected).toBe(false);
   });
 
-  it('logs and keeps sweeping when a sweep throws, instead of taking the process down', async () => {
+  it('logs and keeps sweeping when a sweep throws, instead of taking the process down', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     // Only the first sweep that has something to evict fails; an uncaught
     // throw here would surface as an unhandled error and fail this file.
