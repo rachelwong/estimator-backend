@@ -3,6 +3,10 @@ import { Server, type DefaultEventsMap } from 'socket.io';
 import type { Config } from '../config.js';
 import type { ClientToServerEvents, ServerToClientEvents, SocketData } from './events.js';
 
+// Max size of one socket message. Real messages are tiny; the default is 1MB.
+// A client that sends more than this is disconnected.
+export const MAX_SOCKET_MESSAGE_BYTES = 16 * 1024;
+
 // This only builds the Socket.IO server — it doesn't set up any event
 // handling yet (that happens in handlers.ts), the same way app.ts just
 // builds the Express app without starting it. It attaches to the existing
@@ -17,6 +21,6 @@ export function createIoServer(
 ): Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData> {
   return new Server<ClientToServerEvents, ServerToClientEvents, DefaultEventsMap, SocketData>(
     httpServer,
-    { cors: { origin: config.corsOrigins } },
+    { cors: { origin: config.corsOrigins }, maxHttpBufferSize: MAX_SOCKET_MESSAGE_BYTES },
   );
 }

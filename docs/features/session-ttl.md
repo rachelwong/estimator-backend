@@ -384,7 +384,15 @@ A separate commit, once both frontends are verified on `selection-changed`:
 
 ---
 
-# Part 3 — Operational hardening
+# Part 3 — Operational hardening ✅ Built (not yet deployed)
+
+**As built, where it differs from below:** `io.close()` already closes the
+http.Server it's attached to, so 3.1 is one `io.close()` rather than that plus
+`httpServer.close()` (a second close fails with "server is not running"). The
+shutdown logic lives in `src/shutdown.ts` (`createShutdown`) so it's testable
+without a real signal; `server.ts` only attaches it. 3.3's 8kb limit also needed
+`errorHandler.ts` to map body-parser's own 4xx errors (oversized or malformed
+JSON) to `INVALID_REQUEST` — they were falling through to a generic 500.
 
 Backend only. No protocol change, no frontend work, no coordination — every item
 here can ship on its own.
