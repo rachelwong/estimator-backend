@@ -307,7 +307,10 @@ cleared — so a tab cannot tell which format it is holding. With a new name the
 is nothing to detect: old frontends ignore an event they have never heard of and
 carry on exactly as today, so the backend can ship first and break nothing.
 
-## 2.1 Backend, step 1 — add the new event
+## 2.1 Backend, step 1 — add the new event ✅ Built (not yet deployed)
+
+**As built:** the "`selection-acknowledged` still fires" case is already
+covered by the existing `select-square` tests, so no new test repeats it.
 
 ### `src/sessionStore.ts`
 
@@ -376,11 +379,18 @@ A separate commit, once both frontends are verified on `selection-changed`:
 
 ## 2.4 Docs
 
-- `CLAUDE.md`, the "No cross-tab admin sync" bullet: replace with the
-  room-per-participant behaviour, keeping the note that admin tabs still share
-  one `adminParticipantId`.
-- `estimator-plan.md`: decision #20 and the manual-test line "two admin tabs →
-  tab 2 does not live-update" both invert.
+- `CLAUDE.md` — **only once step 4 has shipped**, so it describes the finished
+  protocol rather than the in-between one:
+  - the "No cross-tab admin sync" bullet: replace with the room-per-participant
+    behaviour, keeping the note that admin tabs still share one
+    `adminParticipantId`.
+  - "Votes stay hidden until reveal": `handleSelectSquare` no longer replies to
+    the calling socket only — it sends `selection-changed` to
+    `participantRoom(sessionId, participantId)`, that one participant's own tabs.
+    `end-session` is still the only session-wide broadcast.
+- `estimator-plan.md` — likewise **only once step 4 has shipped**: decision #20
+  and the manual-test line "two admin tabs → tab 2 does not live-update" both
+  invert.
 
 ---
 

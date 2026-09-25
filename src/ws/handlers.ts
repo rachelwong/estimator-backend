@@ -30,6 +30,14 @@ function readSessionId(socket: AppSocket): string | undefined {
 // console.error (with the full value) only for a true-
 // unexpected bug, so a real WS bug is as visible in the logs as its REST
 // equivalent would be, instead of being silently swallowed.
+// The room holding every socket of one participant, so a selection reaches all
+// their tabs and nobody else. Prefixed with the session id because rooms share
+// one namespace with the per-session rooms, and participant ids are only
+// unique within a session.
+function participantRoom(sessionId: string, participantId: string): string {
+  return `${sessionId}:${participantId}`;
+}
+
 function withErrorHandling(socket: AppSocket, fn: () => void): void {
   try {
     fn();
@@ -63,6 +71,7 @@ function handleJoin(socket: AppSocket, session: SessionState, payload: unknown):
     const name = JoinPayloadSchema.parse(payload);
     const participant = addParticipant(session.id, name);
     socket.data.participantId = participant.id;
+    void socket.join(participantRoom(session.id, participant.id));
     socket.emit(WsEvent.Joined, { participantId: participant.id, name: participant.name });
   });
 }
@@ -81,6 +90,7 @@ function handleAdminAuth(socket: AppSocket, session: SessionState, payload: unkn
       validatedSession.adminParticipantId,
     )!;
     socket.data.participantId = adminParticipant.id;
+    void socket.join(participantRoom(session.id, adminParticipant.id));
     socket.emit(WsEvent.AdminAcknowledged, {
       participantId: adminParticipant.id,
       name: adminParticipant.name,
@@ -94,8 +104,15 @@ function handleAdminAuth(socket: AppSocket, session: SessionState, payload: unkn
 // only have come from a hand-forged socket call (a real client always
 // joins first), so it's rejected with a plain error and no dedicated code.
 // Voting the same square again clears the vote instead of recording it
-// again.
-function handleSelectSquare(socket: AppSocket, session: SessionState, payload: unknown): void {
+// again. The result goes to every tab of this one participant (never the
+// session at large), so a second tab stays in step without learning anyone
+// else's vote.
+function handleSelectSquare(
+  io: AppServer,
+  socket: AppSocket,
+  session: SessionState,
+  payload: unknown,
+): void {
   withErrorHandling(socket, () => {
     const { time, resource } = SelectSquarePayloadSchema.parse(payload);
     const { participantId } = socket.data;
@@ -105,7 +122,9 @@ function handleSelectSquare(socket: AppSocket, session: SessionState, payload: u
       socket.emit(WsEvent.Error, { message: 'No participant identified for this socket yet' });
       return;
     }
-    selectSquare(session.id, participantId, time, resource);
+    const selection = selectSquare(session.id, participantId, time, resource);
+    io.to(participantRoom(session.id, participantId)).emit(WsEvent.SelectionChanged, selection);
+    // Old event, kept until both frontends listen for selection-changed.
     socket.emit(WsEvent.SelectionAcknowledged, { time, resource });
   });
 }
@@ -162,7 +181,7 @@ export function registerSocketHandlers(io: AppServer): void {
 
     socket.on(WsEvent.Join, (name) => handleJoin(socket, session, name));
     socket.on(WsEvent.AdminAuth, (adminToken) => handleAdminAuth(socket, session, adminToken));
-    socket.on(WsEvent.SelectSquare, (payload) => handleSelectSquare(socket, session, payload));
+    socket.on(WsEvent.SelectSquare, (payload) => handleSelectSquare(io, socket, session, payload));
     socket.on(WsEvent.EndSession, (adminToken) =>
       handleEndSession(io, socket, session, adminToken),
     );

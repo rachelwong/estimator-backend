@@ -213,16 +213,17 @@ export function addParticipant(sessionId: string, name: string): Participant {
 // Records (or clears) a participant's vote. Rejects if the session has ended
 // or the {time, resource} pair isn't a real square on this point system.
 // Voting the same square again deselects it; voting a different square
-// overwrites the previous choice. This overwrite is also how two admin tabs
-// (both authenticated to the same adminParticipantId, since admin-auth never
-// mints a per-socket identity) end up last-write-wins with no live sync
-// between them — intentional, not a bug (decision #20).
+// overwrites the previous choice. Returns the resulting selection (null when
+// cleared), so the caller reports the outcome, not the click. Two admin tabs
+// share one adminParticipantId, so they still overwrite each other — but the
+// WS layer sends this result to every tab of that participant, so neither
+// tab is left stale.
 export function selectSquare(
   sessionId: string,
   participantId: string,
   time: number,
   resource: number,
-): void {
+): Selection | null {
   const session = getSessionOrThrow(sessionId);
   if (session.ended) {
     throw new AppError(ErrorCode.SessionEnded, `Session "${sessionId}" has already ended`);
@@ -250,6 +251,7 @@ export function selectSquare(
   // As in addParticipant: only a vote that passed every check counts as
   // activity.
   session.lastActivityAt = new Date();
+  return participant.selection;
 }
 
 // Confirms the given token is the session's real admin token, throwing

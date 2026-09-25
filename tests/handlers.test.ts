@@ -347,6 +347,119 @@ describe('select-square', () => {
   });
 });
 
+// selection-changed goes to every tab of the one participant who voted, and to
+// nobody else. (selection-acknowledged still fires too — covered above.)
+describe('selection-changed', () => {
+  async function adminClient(sessionId: string, adminToken: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    const ackPromise = waitForEvent(client, WsEvent.AdminAcknowledged);
+    client.emit(WsEvent.AdminAuth, adminToken);
+    await ackPromise;
+    return client;
+  }
+
+  async function participantClient(sessionId: string, name: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    const joinedPromise = waitForEvent(client, WsEvent.Joined);
+    client.emit(WsEvent.Join, name);
+    await joinedPromise;
+    return client;
+  }
+
+  // Records whether the event ever arrives, for asserting silence after a wait.
+  function watchForSelectionChanged(client: ClientSocket): { received: boolean } {
+    const watcher = { received: false };
+    client.on(WsEvent.SelectionChanged, () => {
+      watcher.received = true;
+    });
+    return watcher;
+  }
+
+  it('sends the new selection to both admin tabs when one of them votes', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const tabOne = await adminClient(session.id, session.adminToken);
+    const tabTwo = await adminClient(session.id, session.adminToken);
+
+    const tabOnePromise = waitForEvent(tabOne, WsEvent.SelectionChanged);
+    const tabTwoPromise = waitForEvent(tabTwo, WsEvent.SelectionChanged);
+    tabOne.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+
+    const [tabOneSelection, tabTwoSelection] = await Promise.all([tabOnePromise, tabTwoPromise]);
+    expect(tabOneSelection).toEqual({ time: 3, resource: 2 });
+    expect(tabTwoSelection).toEqual({ time: 3, resource: 2 });
+  });
+
+  it('sends null to both admin tabs when a vote is cleared', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const tabOne = await adminClient(session.id, session.adminToken);
+    const tabTwo = await adminClient(session.id, session.adminToken);
+    tabOne.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    await waitForEvent(tabTwo, WsEvent.SelectionChanged);
+
+    const tabOnePromise = waitForEvent(tabOne, WsEvent.SelectionChanged);
+    const tabTwoPromise = waitForEvent(tabTwo, WsEvent.SelectionChanged);
+    tabTwo.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+
+    const [tabOneSelection, tabTwoSelection] = await Promise.all([tabOnePromise, tabTwoPromise]);
+    expect(tabOneSelection).toBeNull();
+    expect(tabTwoSelection).toBeNull();
+  });
+
+  it('never tells another participant in the same session about the vote', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const admin = await adminClient(session.id, session.adminToken);
+    const mary = await participantClient(session.id, 'Mary');
+    const maryWatcher = watchForSelectionChanged(mary);
+
+    const adminPromise = waitForEvent(admin, WsEvent.SelectionChanged);
+    admin.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    await adminPromise;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(maryWatcher.received).toBe(false);
+  });
+
+  it('never reaches a same-named participant in a different session', async () => {
+    const sessionA = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const sessionB = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const maryInA = await participantClient(sessionA.id, 'Mary');
+    const maryInB = await participantClient(sessionB.id, 'Mary');
+    const adminInB = await adminClient(sessionB.id, sessionB.adminToken);
+    const maryInBWatcher = watchForSelectionChanged(maryInB);
+    const adminInBWatcher = watchForSelectionChanged(adminInB);
+
+    const maryInAPromise = waitForEvent(maryInA, WsEvent.SelectionChanged);
+    maryInA.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    expect(await maryInAPromise).toEqual({ time: 3, resource: 2 });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(maryInBWatcher.received).toBe(false);
+    expect(adminInBWatcher.received).toBe(false);
+  });
+});
+
 // A client can send any payload, whatever the types say. A bad one should get
 // INVALID_REQUEST and leave the session unchanged.
 describe('malformed payloads', () => {
