@@ -244,7 +244,7 @@ describe('select-square', () => {
     return client;
   }
 
-  it('selects a square and acks with the chosen coordinates', async () => {
+  it('selects a square and sends back the new selection', async () => {
     const session = createSession({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
@@ -252,14 +252,10 @@ describe('select-square', () => {
     });
     const client = await joinedClient(session.id, 'Mary');
 
-    const ackPromise = waitForEvent<{ time: number; resource: number }>(
-      client,
-      WsEvent.SelectionAcknowledged,
-    );
+    const changedPromise = waitForEvent(client, WsEvent.SelectionChanged);
     client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
-    const ack = await ackPromise;
 
-    expect(ack).toEqual({ time: 3, resource: 2 });
+    expect(await changedPromise).toEqual({ time: 3, resource: 2 });
   });
 
   it('deselects when the same square is selected again', async () => {
@@ -270,15 +266,12 @@ describe('select-square', () => {
     });
     const client = await joinedClient(session.id, 'Mary');
     client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
-    await waitForEvent(client, WsEvent.SelectionAcknowledged);
+    await waitForEvent(client, WsEvent.SelectionChanged);
 
-    const ackPromise = waitForEvent<{ time: number; resource: number }>(
-      client,
-      WsEvent.SelectionAcknowledged,
-    );
+    const changedPromise = waitForEvent(client, WsEvent.SelectionChanged);
     client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
-    await ackPromise;
 
+    expect(await changedPromise).toBeNull();
     const participant = Array.from(session.participants.values()).find((p) => p.name === 'Mary')!;
     expect(participant.selection).toBeNull();
   });
@@ -348,7 +341,7 @@ describe('select-square', () => {
 });
 
 // selection-changed goes to every tab of the one participant who voted, and to
-// nobody else. (selection-acknowledged still fires too — covered above.)
+// nobody else.
 describe('selection-changed', () => {
   async function adminClient(sessionId: string, adminToken: string): Promise<ClientSocket> {
     const client = connectClient(sessionId);

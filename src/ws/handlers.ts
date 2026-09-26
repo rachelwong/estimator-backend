@@ -124,8 +124,6 @@ function handleSelectSquare(
     }
     const selection = selectSquare(session.id, participantId, time, resource);
     io.to(participantRoom(session.id, participantId)).emit(WsEvent.SelectionChanged, selection);
-    // Old event, kept until both frontends listen for selection-changed.
-    socket.emit(WsEvent.SelectionAcknowledged, { time, resource });
   });
 }
 

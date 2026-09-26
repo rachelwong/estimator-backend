@@ -78,9 +78,9 @@ describe('server composition', () => {
     client.emit(WsEvent.AdminAuth, session.adminToken);
     await adminAckPromise;
 
-    const selectionAckPromise = waitForEvent(client, WsEvent.SelectionAcknowledged);
+    const selectionChangedPromise = waitForEvent(client, WsEvent.SelectionChanged);
     client.emit(WsEvent.SelectSquare, { time: 2, resource: 3 });
-    await selectionAckPromise;
+    await selectionChangedPromise;
 
     const endedPromise = waitForEvent<{
       squares: { time: number; resource: number; names: string[] }[];

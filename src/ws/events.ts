@@ -13,7 +13,6 @@ export const WsEvent = {
   SessionInfo: 'session-info',
   Joined: 'joined',
   AdminAcknowledged: 'admin-acknowledged',
-  SelectionAcknowledged: 'selection-acknowledged',
   SelectionChanged: 'selection-changed',
   SessionEnded: 'session-ended',
   Error: 'error',
@@ -53,9 +52,6 @@ export interface ServerToClientEvents {
     name: string;
     selection: Selection | null;
   }) => void;
-  // Old event: echoes the clicked square to the clicking tab only. Kept until
-  // both frontends listen for selection-changed instead.
-  [WsEvent.SelectionAcknowledged]: (payload: { time: number; resource: number }) => void;
   // The participant's selection after the click (null when cleared), sent to
   // every tab of that one participant.
   [WsEvent.SelectionChanged]: (payload: Selection | null) => void;
