@@ -7,11 +7,6 @@ once, and what happens in the awkward cases.
 No code walkthrough. Where a snippet makes something clearer it's there to read,
 not to run.
 
-> **Status.** This describes the behaviour once the work in
-> `docs/features/session-ttl.md` has shipped. Anything not yet live is marked
-> **(pending)**. When the rollout finishes, the marks come off and everything
-> here should be true as written.
-
 ---
 
 ## 1. What a session is
@@ -274,8 +269,8 @@ a reveal can show them twice — once as their old self, once as their new one.
 This is a known trade-off of not tracking identity, not a bug.
 
 **The admin opens a second tab, or refreshes.** They're recognised as the same
-admin, and their existing vote is shown rather than a blank grid. **(pending)**
-A click in either tab now updates both.
+admin, and their existing vote is shown rather than a blank grid. A click in
+either tab updates both, including clearing the vote.
 
 **The admin closes their tab and loses their browser storage.** They can't end
 the session any more, and nobody else can either. The session eventually expires
@@ -357,8 +352,8 @@ the connection to A stays open in the background until you close the tab.
   same link again and type your name, you become a *second person* — and both of
   you show up at the reveal, with whatever each had voted. The admin is the
   exception: their browser recognises them by token, so a second admin tab is
-  still the same one admin, with the same vote. **(pending)** and a click in
-  either admin tab now updates both.
+  still the same one admin, with the same vote, and a click in either admin tab
+  updates both.
 
 ## 11. What the reveal shows
 

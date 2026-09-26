@@ -25,8 +25,8 @@ re-litigate while implementing):
 ## The socket protocol in plain English
 
 Every message this app sends over the socket, what it means, and who receives
-it. Two are new or changed in part 2; the rest are unchanged and listed so the
-protocol reads as one piece.
+it. Part 2 added `selection-changed` and removed `selection-acknowledged`; the
+rest are unchanged and listed so the protocol reads as one piece.
 
 ### The browser sends
 
@@ -44,8 +44,8 @@ protocol reads as one piece.
 | `session-info` | "This session exists, here's its grid, and here's whether it has already ended." Sent to a tab the moment it connects, before it has identified itself. |
 | `joined` | "You're in. Here's the name you actually got" — which may have a number added if someone already had it. Sent only to the tab that joined. |
 | `admin-acknowledged` | "You're confirmed as the admin, and here's the square you currently have" — so a refreshed or second admin tab doesn't start blank. Sent only to the tab that authenticated. |
-| `selection-acknowledged` | *(today, removed at the end of part 2)* "Here's the square you clicked." Sent only to the tab that clicked it. That tab then works out for itself whether the click selected or cleared — which is exactly the guesswork part 2 removes. |
-| `selection-changed` | *(new in part 2)* "Your selection is now this square" — or "you now have no selection." Sent to **every** tab belonging to that one person, so a second tab stays in step. Nothing is inferred: the server has already worked out what the click meant. |
+| `selection-acknowledged` | *(removed in part 2, step 4)* "Here's the square you clicked." Sent only to the tab that clicked it. That tab then works out for itself whether the click selected or cleared — which is exactly the guesswork part 2 removes. |
+| `selection-changed` | *(added in part 2)* "Your selection is now this square" — or "you now have no selection." Sent to **every** tab belonging to that one person, so a second tab stays in step. Nothing is inferred: the server has already worked out what the click meant. |
 | `session-ended` | "The session is over — here's everyone's vote." The only message that goes to everybody in the session, and the only moment anyone learns what anyone else picked. |
 | `error` | "That didn't work, and here's the code and message saying why." Sent only to the tab that caused it. |
 
@@ -64,10 +64,9 @@ One backend, two live frontends, built from two branches of one repo:
 - **`release/design` → `fold-and-flip.vercel.app`** — the live product, and the
   branch that is ahead (52 commits, against 2 the other way). This plan's file
   and line references describe it.
-- **Other branches** (`redesign/openjev`, `redesign/two-mode-visual-world`, the
-  riso-two-mode worktree) — anything long-lived that will be deployed later
-  needs part 2's frontend change merged or rebased in before it ships, or its
-  second tab keeps guessing at a message the server no longer sends.
+- **Other branches** — none remain. Any new long-lived branch cut from before
+  part 2 needs its frontend change before it ships, or its second tab keeps
+  guessing at a message the server no longer sends.
 
 Functionally the two branches are the same; the difference is visual. The only
 divergence that touches this work is in files part 2 doesn't need, so its change
@@ -75,7 +74,10 @@ should be the same edit on both branches — but each gets its own test run.
 
 ---
 
-# Part 0 — The session explainer (`docs/features/sessions-explained.md`)
+# Part 0 — The session explainer (`docs/features/sessions-explained.md`) ✅ Done
+
+**As built:** re-checked against the deployed code once the rollout finished;
+the pending marks are off.
 
 These three parts change the business rules around a session — how long it
 lives, what keeps it alive, what a second tab sees — and those rules currently
@@ -98,7 +100,7 @@ what happens in the awkward cases. Plain English and diagrams, no code walkthrou
 
 ---
 
-# Part 1 — Session TTL ✅ Built (not yet deployed)
+# Part 1 — Session TTL ✅ Deployed
 
 ## The problem
 
@@ -307,7 +309,7 @@ cleared — so a tab cannot tell which format it is holding. With a new name the
 is nothing to detect: old frontends ignore an event they have never heard of and
 carry on exactly as today, so the backend can ship first and break nothing.
 
-## 2.1 Backend, step 1 — add the new event ✅ Built (not yet deployed)
+## 2.1 Backend, step 1 — add the new event ✅ Deployed
 
 **As built:** the "`selection-acknowledged` still fires" case is already
 covered by the existing `select-square` tests, so no new test repeats it.
@@ -354,6 +356,15 @@ covered by the existing `select-square` tests, so no new test repeats it.
 
 Same edit on both branches; separate test runs.
 
+**Step 2 (`master`) ✅ Deployed.** The frontend has no unit-test
+runner, so the tests below are smoke checks instead: `scripts/smoke/scenarios/session.mjs`
+now expects the second admin tab to live-sync, and clears the vote from the
+tab that didn't pick it.
+
+**Step 3 (`release/design`) ✅ Deployed.** Same change, applied
+from `master`'s commit. Only the smoke script conflicted, on formatting; its
+extra keyboard checks stay after the clear.
+
 - `src/types/protocol.ts`: add `selection-changed` with payload
   `Selection | null`. Leave the old event's type until step 5.
 - `src/lib/sessionConnectionRegistry.ts`: listen to `selection-changed` and
@@ -367,7 +378,16 @@ Same edit on both branches; separate test runs.
 - Tests: the reducer applies `null` as a cleared selection and a square as-is,
   without consulting previous state; two simulated tabs converge.
 
-## 2.3 Backend, step 4 — remove the old event
+## 2.3 Backend, step 4 — remove the old event ✅ Deployed
+
+**As built:** the two `select-square` tests and the `server.test.ts` round trip
+now wait on `selection-changed`; the clear test also asserts its `null` payload.
+Smoke-tested locally against this backend: `release/design` 165/165,
+`master` 102/102, two-tab sync and clearing included. The redesign branches
+were unused and fully merged, so they were deleted rather than updated.
+
+**Step 5 (frontend type removal) ✅ Deployed** on `master`, then
+cherry-picked to `release/design`. Smoke: 102/102 and 165/165.
 
 A separate commit, once both frontends are verified on `selection-changed`:
 
@@ -377,7 +397,10 @@ A separate commit, once both frontends are verified on `selection-changed`:
 - Check no redesign branch is still listening for it before this ships — this is
   the one step in the whole plan that can break a client.
 
-## 2.4 Docs
+## 2.4 Docs ✅ Done
+
+**As built:** also brought the frontend `master` copy of `estimator-plan.md` up
+to date (parts 1–3); `release/design`'s copy was left as is.
 
 - `CLAUDE.md` — **only once step 4 has shipped**, so it describes the finished
   protocol rather than the in-between one:
@@ -394,7 +417,7 @@ A separate commit, once both frontends are verified on `selection-changed`:
 
 ---
 
-# Part 3 — Operational hardening ✅ Built (not yet deployed)
+# Part 3 — Operational hardening ✅ Deployed
 
 **As built, where it differs from below:** `io.close()` already closes the
 http.Server it's attached to, so 3.1 is one `io.close()` rather than that plus
