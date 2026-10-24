@@ -17,6 +17,7 @@ sessionsRouter.post('/', (req, res) => {
     adminParticipantId: session.adminParticipantId,
     adminName: adminParticipant.name,
     pointSystem: session.pointSystem,
+    description: session.description,
   });
 });
 
@@ -30,6 +31,7 @@ sessionsRouter.get('/:id', (req, res) => {
   res.status(200).json({
     sessionId: session.id,
     pointSystem: session.pointSystem,
+    description: session.description,
     ended: session.ended,
     ...(session.ended ? { reveal: computeReveal(session) } : {}),
   });

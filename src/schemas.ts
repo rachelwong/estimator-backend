@@ -5,6 +5,7 @@ export const CreateSessionRequestSchema = z.object({
   adminName: z.string().min(1),
   pointSystemType: z.enum([PointSystemType.Numerical, PointSystemType.Fibonacci]),
   sliderMax: z.number(),
+  description: z.string().optional(),
 });
 
 const PointSystemSchema = z
@@ -22,6 +23,7 @@ export const CreateSessionResponseSchema = z
     adminParticipantId: z.string(),
     adminName: z.string(),
     pointSystem: PointSystemSchema,
+    description: z.string().nullable(),
   })
   .strict();
 
@@ -44,6 +46,7 @@ export const GetSessionResponseSchema = z
   .object({
     sessionId: z.string(),
     pointSystem: PointSystemSchema,
+    description: z.string().nullable(),
     ended: z.boolean(),
     reveal: RevealPayloadSchema.optional(),
   })

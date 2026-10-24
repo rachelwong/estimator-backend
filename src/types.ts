@@ -28,6 +28,8 @@ export interface SessionState {
   adminToken: string;
   adminParticipantId: string;
   pointSystem: PointSystem;
+  // The ticket or task being estimated, set at creation. Null when none was given.
+  description: string | null;
   participants: Map<string, Participant>;
   ended: boolean;
   createdAt: Date;

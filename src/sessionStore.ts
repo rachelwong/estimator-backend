@@ -9,7 +9,11 @@ import type {
   SessionState,
 } from './types.js';
 import { generateAdminToken, generateParticipantId, generateSessionId } from './utils/id.js';
-import { normalizeParticipantName, validateParticipantName } from './utils/validation.js';
+import {
+  normalizeDescription,
+  normalizeParticipantName,
+  validateParticipantName,
+} from './utils/validation.js';
 
 const sessions = new Map<string, SessionState>();
 
@@ -99,18 +103,21 @@ interface CreateSessionInput {
   adminName: string;
   pointSystemType: PointSystemType;
   sliderMax: number;
+  description?: string;
 }
 
-// Creates a brand-new session: validates the admin's name and point-system
-// settings, generates a unique session id plus an admin token, and registers
-// the admin as the session's first participant.
+// Creates a brand-new session: validates the admin's name, point-system
+// settings and optional description, generates a unique session id plus an
+// admin token, and registers the admin as the session's first participant.
 export function createSession({
   adminName,
   pointSystemType,
   sliderMax,
+  description,
 }: CreateSessionInput): SessionState {
   const normalizedAdminName = formatName(adminName);
   const axisValues = computeAxisValues(pointSystemType, sliderMax);
+  const normalizedDescription = normalizeDescription(description);
 
   let sessionId = generateSessionId();
   while (sessions.has(sessionId)) {
@@ -135,6 +142,7 @@ export function createSession({
     adminToken: generateAdminToken(),
     adminParticipantId,
     pointSystem: { type: pointSystemType, sliderMax, axisValues },
+    description: normalizedDescription,
     participants,
     ended: false,
     createdAt,
