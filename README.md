@@ -128,5 +128,5 @@ Backend claude experience is very different to the frontend claude experience. I
 
 [ ] Include additional notes in the payload for selection submission so that users can provide more context, ask questions as part of their estimation
 [ ] Return name of the person in create session and join session response payload to display on the FE
-[ ] Allow admin-users to include a text payload for every session to identify what task or feature they are currently estimating.
+[x] Allow admin-users to include a text payload for every session to identify what task or feature they are currently estimating.
 [ ] Ability for a participant or admin to change their estimation after the session has ended.
