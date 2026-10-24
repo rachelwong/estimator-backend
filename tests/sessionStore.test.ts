@@ -86,6 +86,63 @@ describe('createSession', () => {
     expect(second.id).toBe('forced-unique-session-id');
     expect(second.id).not.toBe(first.id);
   });
+
+  describe('description', () => {
+    it('stores the description with its ends trimmed', () => {
+      const session = createSession({
+        adminName: 'Amy',
+        ...NUMERICAL,
+        description: '  PROJ-12 https://example.com/ticket/12  ',
+      });
+
+      expect(session.description).toBe('PROJ-12 https://example.com/ticket/12');
+    });
+
+    it('stores null when the description is left out', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+
+      expect(session.description).toBeNull();
+    });
+
+    it('stores null for a whitespace-only description', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL, description: '   ' });
+
+      expect(session.description).toBeNull();
+    });
+
+    it('collapses runs of spaces, tabs and line breaks to one space', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL, description: 'a \n\t b' });
+
+      expect(session.description).toBe('a b');
+    });
+
+    it('accepts a description of exactly 300 characters', () => {
+      const session = createSession({
+        adminName: 'Amy',
+        ...NUMERICAL,
+        description: 'a'.repeat(300),
+      });
+
+      expect(session.description).toHaveLength(300);
+    });
+
+    it('rejects a description of 301 characters', () => {
+      expectAppError(
+        () => createSession({ adminName: 'Amy', ...NUMERICAL, description: 'a'.repeat(301) }),
+        'INVALID_DESCRIPTION',
+      );
+    });
+
+    it('counts the length after trimming, so 300 characters with spaces around them is accepted', () => {
+      const session = createSession({
+        adminName: 'Amy',
+        ...NUMERICAL,
+        description: `  ${'a'.repeat(300)}  `,
+      });
+
+      expect(session.description).toHaveLength(300);
+    });
+  });
 });
 
 describe('getSession', () => {

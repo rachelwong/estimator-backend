@@ -149,6 +149,66 @@ describe('POST /sessions', () => {
     const body = ErrorResponseSchema.parse(response.body);
     expect(body.error).toBe('INVALID_REQUEST');
   });
+
+  it('returns the description it was given', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+      description: 'PROJ-12 https://example.com/ticket/12',
+    });
+
+    expect(response.status).toBe(201);
+    const body = CreateSessionResponseSchema.parse(response.body);
+    expect(body.description).toBe('PROJ-12 https://example.com/ticket/12');
+  });
+
+  it('returns a null description when none was given', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+
+    expect(response.status).toBe(201);
+    const body = CreateSessionResponseSchema.parse(response.body);
+    expect(body.description).toBeNull();
+  });
+
+  it('rejects a description sent as a number as INVALID_REQUEST', async () => {
+    const app = createApp(testConfig);
+    const response = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+      description: 123,
+    });
+
+    expect(response.status).toBe(400);
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.error).toBe('INVALID_REQUEST');
+  });
+
+  // The message states the rule and never echoes the input, so user text never
+  // reaches the server logs (errorHandler logs every AppError message).
+  it('rejects a 301-character description as INVALID_DESCRIPTION, without echoing it', async () => {
+    const app = createApp(testConfig);
+    const tooLong = 'x'.repeat(301);
+    const response = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+      description: tooLong,
+    });
+
+    expect(response.status).toBe(400);
+    const body = ErrorResponseSchema.parse(response.body);
+    expect(body.error).toBe('INVALID_DESCRIPTION');
+    expect(body.message).toBe('description must be at most 300 characters');
+    expect(body.message).not.toContain('xxx');
+  });
 });
 
 describe('request body limits', () => {
@@ -245,6 +305,57 @@ describe('GET /sessions/:id', () => {
     expect(body.ended).toBe(true);
     expect(body.reveal).toBeDefined();
     expect((response.body as Record<string, unknown>).adminToken).toBeUndefined();
+  });
+
+  it('returns the description of an open session', async () => {
+    const app = createApp(testConfig);
+    const createdResponse = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+      description: 'PROJ-12 https://example.com/ticket/12',
+    });
+    const created = CreateSessionResponseSchema.parse(createdResponse.body);
+
+    const response = await request(app).get(`/sessions/${created.sessionId}`);
+
+    expect(response.status).toBe(200);
+    const body = GetSessionResponseSchema.parse(response.body);
+    expect(body.description).toBe('PROJ-12 https://example.com/ticket/12');
+  });
+
+  it('returns the description of an ended session', async () => {
+    const app = createApp(testConfig);
+    const createdResponse = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+      description: 'PROJ-12 https://example.com/ticket/12',
+    });
+    const created = CreateSessionResponseSchema.parse(createdResponse.body);
+    endSession(created.sessionId, created.adminToken);
+
+    const response = await request(app).get(`/sessions/${created.sessionId}`);
+
+    expect(response.status).toBe(200);
+    const body = GetSessionResponseSchema.parse(response.body);
+    expect(body.description).toBe('PROJ-12 https://example.com/ticket/12');
+  });
+
+  it('returns a null description for a session created without one', async () => {
+    const app = createApp(testConfig);
+    const createdResponse = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const created = CreateSessionResponseSchema.parse(createdResponse.body);
+
+    const response = await request(app).get(`/sessions/${created.sessionId}`);
+
+    expect(response.status).toBe(200);
+    const body = GetSessionResponseSchema.parse(response.body);
+    expect(body.description).toBeNull();
   });
 
   // An expired session is deleted outright, so over REST it is exactly the
