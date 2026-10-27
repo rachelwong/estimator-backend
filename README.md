@@ -16,6 +16,7 @@ You will require a local `.env` file with below variables:
 PORT=3001
 CORS_ORIGIN=http://localhost:5173
 NODE_ENV=development
+NODE_VERSION=24.22.1 // min lts
 ```
 
 For running a local instance on your machine:
