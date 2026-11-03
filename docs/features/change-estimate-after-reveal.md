@@ -6,8 +6,8 @@ Today a session is frozen once the admin ends it. `select-square` gets
 This plan lets anyone who joined (and the admin) keep changing their estimate
 on the Reveal screen. Everyone looking at the Reveal sees the changes live.
 
-Status: backend built (build steps 1–3, not yet deployed). Frontend not
-started.
+Status: backend built and live (stage 1 done, 2026-11-03). Frontend in
+progress.
 
 Rules and behaviour, without code:
 [change-estimate-after-reveal-behaviour.md](change-estimate-after-reveal-behaviour.md).
@@ -437,23 +437,33 @@ needed. Both frontends keep working on it.
 
 Ships breaking changes 1–4 and 6. None of them break either frontend.
 
-- [ ] B1. Local checks pass:
+- [x] B1. Local checks pass:
       `npm run typecheck && npm run lint && npm test && npm run build`.
-- [ ] B2. The compiled build boots:
+- [x] B2. The compiled build boots:
       `NODE_ENV=production CORS_ORIGIN=https://example.com npm start`, then
       `/healthz` returns 200.
-- [ ] B3. **Check that the old frontend still works with the new backend.**
+- [x] B3. **Check that the old frontend still works with the new backend.**
       Run the new backend locally with the frontend on `master`:
       `npm run dev` there, and `npm run smoke`. The Reveal must still load and
       show no errors. This covers breaking changes 1–2.
-- [ ] B4. Push to `master`. Render auto-deploys.
-- [ ] B5. Render → Events shows the deploy live. Render → Logs shows no boot
+- [x] B4. Push to `master`. Render auto-deploys.
+- [x] B5. Render → Events shows the deploy live. Render → Logs shows no boot
       errors.
-- [ ] B6. `curl https://estimator-backend-1nf2.onrender.com/healthz` returns
+- [x] B6. `curl https://estimator-backend-1nf2.onrender.com/healthz` returns
       200.
-- [ ] B7. On the prototype (`-ashen`) and on `fold-and-flip` as it is now:
+- [x] B7. On the prototype (`-ashen`) and on `fold-and-flip` as it is now:
       create a session, join from a second profile, vote, and end it. Both
       tabs move to the Reveal, and the Reveal is right.
+
+Done 2026-11-03, deploy `7990c72`:
+
+- B3 ran both frontends' smoke suites locally against the new backend:
+  `master` 102/102, `release/design` 184/184.
+- B5: Render showed the deploy live. The logs view itself was not checked.
+- B7 ran both smoke suites against production instead of by hand: `-ashen`
+  102/102, `fold-and-flip` 184/184.
+- Also checked on production: a vote after the end reaches a watcher as
+  `reveal-updated`, and `GET /sessions/:id` shows it.
 
 **Pause point.** Both frontends work. Ended sessions can now live longer than
 1 hour if someone votes after the end. No current frontend can vote after the
