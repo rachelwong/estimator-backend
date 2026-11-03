@@ -47,6 +47,7 @@ rest are unchanged and listed so the protocol reads as one piece.
 | `selection-acknowledged` | *(removed in part 2, step 4)* "Here's the square you clicked." Sent only to the tab that clicked it. That tab then works out for itself whether the click selected or cleared — which is exactly the guesswork part 2 removes. |
 | `selection-changed` | *(added in part 2)* "Your selection is now this square" — or "you now have no selection." Sent to **every** tab belonging to that one person, so a second tab stays in step. Nothing is inferred: the server has already worked out what the click meant. |
 | `session-ended` | "The session is over — here's everyone's vote." The only message that goes to everybody in the session, and the only moment anyone learns what anyone else picked. |
+| `reveal-updated` | *(added later, change estimate after reveal)* "Someone changed their vote after the end — here's the new reveal." Sent to everybody in the session, only after the end. |
 | `error` | "That didn't work, and here's the code and message saying why." Sent only to the tab that caused it. |
 
 The rule that shapes all of this: until `session-ended`, no message ever tells
@@ -124,7 +125,7 @@ none"), taken when nightly spin-downs made it self-correcting, so this feature
 
 | Session state | Backend deletes it                                       |
 | ------------- | -------------------------------------------------------- |
-| Ended         | 1 hour after `endedAt`                                   |
+| Ended         | 1 hour after the later of `endedAt` and its last vote    |
 | Open          | 1.5 hours after its last activity (`lastActivityAt`)     |
 
 - **Activity** is anything a person actually did: creating the session, joining
@@ -136,8 +137,11 @@ none"), taken when nightly spin-downs made it self-correcting, so this feature
 - **A pure read never extends it.** `GET /sessions/:id`, `getSession` and
   `validateAdminToken` leave the clock alone, so a monitor or a crawler can't
   keep a dead session alive.
-- **An ended session's clock runs from `endedAt`**, never `lastActivityAt`, so
-  ending a session restarts the countdown rather than inheriting the last vote's.
+- **An ended session's clock runs from `endedAt`**, so ending a session restarts
+  the countdown rather than inheriting the last vote's.
+  - **Update (change estimate after reveal):** a vote after the end also moves
+    the clock. It runs from the later of `endedAt` and that vote. Opening the
+    Reveal still doesn't. See `change-estimate-after-reveal.md`.
 - **Boundary**: exactly at the TTL is kept; TTL + 1 ms is deleted (strict `>`).
 - Each session's clock is its own — a busy session never keeps an abandoned one
   alive.

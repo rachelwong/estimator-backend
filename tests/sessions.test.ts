@@ -7,7 +7,7 @@ import {
   ErrorResponseSchema,
   GetSessionResponseSchema,
 } from '../src/schemas.js';
-import { endSession, resetSessionStore } from '../src/sessionStore.js';
+import { endSession, getSession, resetSessionStore, selectSquare } from '../src/sessionStore.js';
 import { PointSystemType } from '../src/types.js';
 
 const testConfig: Config = {
@@ -305,6 +305,26 @@ describe('GET /sessions/:id', () => {
     expect(body.ended).toBe(true);
     expect(body.reveal).toBeDefined();
     expect((response.body as Record<string, unknown>).adminToken).toBeUndefined();
+  });
+
+  it('shows a vote made after the end in the reveal', async () => {
+    const app = createApp(testConfig);
+    const createdResponse = await request(app).post('/sessions').send({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const created = CreateSessionResponseSchema.parse(createdResponse.body);
+    endSession(created.sessionId, created.adminToken);
+    selectSquare(created.sessionId, getSession(created.sessionId)!.adminParticipantId, 3, 2);
+
+    const response = await request(app).get(`/sessions/${created.sessionId}`);
+
+    const body = GetSessionResponseSchema.parse(response.body);
+    expect(body.reveal).toEqual({
+      squares: [{ time: 3, resource: 2, names: ['Jim'] }],
+      abstained: [],
+    });
   });
 
   it('returns the description of an open session', async () => {

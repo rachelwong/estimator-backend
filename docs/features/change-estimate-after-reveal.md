@@ -6,7 +6,8 @@ Today a session is frozen once the admin ends it. `select-square` gets
 This plan lets anyone who joined (and the admin) keep changing their estimate
 on the Reveal screen. Everyone looking at the Reveal sees the changes live.
 
-Status: plan only. Nothing is built yet.
+Status: backend built (build steps 1–3, not yet deployed). Frontend not
+started.
 
 Rules and behaviour, without code:
 [change-estimate-after-reveal-behaviour.md](change-estimate-after-reveal-behaviour.md).

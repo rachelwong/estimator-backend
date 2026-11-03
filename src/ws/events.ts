@@ -15,6 +15,7 @@ export const WsEvent = {
   AdminAcknowledged: 'admin-acknowledged',
   SelectionChanged: 'selection-changed',
   SessionEnded: 'session-ended',
+  RevealUpdated: 'reveal-updated',
   Error: 'error',
 } as const;
 export type WsEvent = (typeof WsEvent)[keyof typeof WsEvent];
@@ -56,6 +57,9 @@ export interface ServerToClientEvents {
   // every tab of that one participant.
   [WsEvent.SelectionChanged]: (payload: Selection | null) => void;
   [WsEvent.SessionEnded]: (payload: RevealPayload) => void;
+  // The new reveal after a vote on an ended session, sent to the whole
+  // session. Never sent before the end.
+  [WsEvent.RevealUpdated]: (payload: RevealPayload) => void;
   [WsEvent.Error]: (payload: { error?: ErrorCode; message: string }) => void;
 }
 

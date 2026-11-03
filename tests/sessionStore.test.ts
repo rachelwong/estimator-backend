@@ -298,14 +298,55 @@ describe('selectSquare', () => {
     );
   });
 
-  it('rejects a vote once the session has ended', () => {
-    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
-    endSession(session.id, session.adminToken);
+  describe('after the session has ended', () => {
+    it('accepts a vote', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      endSession(session.id, session.adminToken);
 
-    expectAppError(
-      () => selectSquare(session.id, session.adminParticipantId, 2, 3),
-      'SESSION_ENDED',
-    );
+      const selection = selectSquare(session.id, session.adminParticipantId, 2, 3);
+
+      expect(selection).toEqual({ time: 2, resource: 3 });
+      expect(session.participants.get(session.adminParticipantId)?.selection).toEqual({
+        time: 2,
+        resource: 3,
+      });
+    });
+
+    it('moves a vote to another square', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      selectSquare(session.id, session.adminParticipantId, 2, 3);
+      endSession(session.id, session.adminToken);
+
+      const selection = selectSquare(session.id, session.adminParticipantId, 4, 1);
+
+      expect(selection).toEqual({ time: 4, resource: 1 });
+    });
+
+    it('clears a vote when the same square is clicked again', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      selectSquare(session.id, session.adminParticipantId, 2, 3);
+      endSession(session.id, session.adminToken);
+
+      const selection = selectSquare(session.id, session.adminParticipantId, 2, 3);
+
+      expect(selection).toBeNull();
+      expect(session.participants.get(session.adminParticipantId)?.selection).toBeNull();
+    });
+
+    it('still rejects an out-of-range square and leaves the vote untouched', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      selectSquare(session.id, session.adminParticipantId, 2, 3);
+      endSession(session.id, session.adminToken);
+
+      expectAppError(
+        () => selectSquare(session.id, session.adminParticipantId, 100, 3),
+        'INVALID_SELECTION',
+      );
+      expect(session.participants.get(session.adminParticipantId)?.selection).toEqual({
+        time: 2,
+        resource: 3,
+      });
+    });
   });
 });
 
@@ -435,6 +476,37 @@ describe('session TTL', () => {
 
       atAge(30 * MINUTE_MS);
       touchSession(session.id);
+
+      atAge(ENDED_TTL_MS);
+      expect(getSession(session.id)).toBe(session);
+
+      atAge(ENDED_TTL_MS + 1);
+      expect(getSession(session.id)).toBeUndefined();
+    });
+
+    it('is kept alive by a vote after the end, for 1 hour after that vote', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      endSession(session.id, session.adminToken);
+
+      atAge(30 * MINUTE_MS);
+      selectSquare(session.id, session.adminParticipantId, 2, 3);
+
+      atAge(90 * MINUTE_MS);
+      expect(getSession(session.id)).toBe(session);
+
+      atAge(90 * MINUTE_MS + 1);
+      expect(getSession(session.id)).toBeUndefined();
+    });
+
+    it('is not kept alive by a rejected vote after the end', () => {
+      const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+      endSession(session.id, session.adminToken);
+
+      atAge(30 * MINUTE_MS);
+      expectAppError(
+        () => selectSquare(session.id, session.adminParticipantId, 100, 3),
+        'INVALID_SELECTION',
+      );
 
       atAge(ENDED_TTL_MS);
       expect(getSession(session.id)).toBe(session);
@@ -623,6 +695,39 @@ describe('computeReveal', () => {
         { time: 4, resource: 1, names: ['Bea'] },
       ],
       abstained: ['Cid'],
+    });
+  });
+
+  it('shows a vote moved after the end on its new square', () => {
+    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+    const bea = addParticipant(session.id, 'Bea');
+    selectSquare(session.id, session.adminParticipantId, 2, 3);
+    selectSquare(session.id, bea.id, 2, 3);
+    endSession(session.id, session.adminToken);
+
+    selectSquare(session.id, bea.id, 4, 1);
+
+    expect(computeReveal(session)).toEqual({
+      squares: [
+        { time: 2, resource: 3, names: ['Amy'] },
+        { time: 4, resource: 1, names: ['Bea'] },
+      ],
+      abstained: [],
+    });
+  });
+
+  it('lists a vote cleared after the end as abstained', () => {
+    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+    const bea = addParticipant(session.id, 'Bea');
+    selectSquare(session.id, session.adminParticipantId, 2, 3);
+    selectSquare(session.id, bea.id, 4, 1);
+    endSession(session.id, session.adminToken);
+
+    selectSquare(session.id, bea.id, 4, 1);
+
+    expect(computeReveal(session)).toEqual({
+      squares: [{ time: 2, resource: 3, names: ['Amy'] }],
+      abstained: ['Bea'],
     });
   });
 });

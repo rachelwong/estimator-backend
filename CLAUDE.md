@@ -6,7 +6,7 @@ Backend for a "Jira poker" estimation tool: participants vote on a 2D time × re
 
 [sessionStore.ts](src/sessionStore.ts) holds every session in a module-level `Map`. No database, no persistence — a restart wipes all sessions, and there is no support for running more than one instance (a second process would have its own empty `Map`, so a client's REST/WS traffic must land on the same process every time). Don't assume sessions survive a deploy or scale horizontally without changing this.
 
-Sessions also expire on their own, on top of being wiped by restarts: an ended one is deleted 1 hour after `endedAt`, an open one 1.5 hours after `lastActivityAt` (creating, joining, voting, and a socket connecting all reset that clock; a pure read never does). `getSession`/`getSessionOrThrow` delete an expired entry on lookup, so the deadline is exact, and [ws/sessionSweeper.ts](src/ws/sessionSweeper.ts)'s one-minute timer clears out the sessions nobody looks at again and disconnects any sockets still in them. An expired session is deleted outright, never tombstoned — it reads exactly like one that never existed (`404`/`UNKNOWN_SESSION`). See [docs/features/session-ttl.md](docs/features/session-ttl.md).
+Sessions also expire on their own, on top of being wiped by restarts: an ended one is deleted 1 hour after the later of `endedAt` and its last vote after the end, an open one 1.5 hours after `lastActivityAt` (creating, joining, voting, and a socket connecting all reset that clock; a pure read never does; on an ended session only a vote does). `getSession`/`getSessionOrThrow` delete an expired entry on lookup, so the deadline is exact, and [ws/sessionSweeper.ts](src/ws/sessionSweeper.ts)'s one-minute timer clears out the sessions nobody looks at again and disconnects any sockets still in them. An expired session is deleted outright, never tombstoned — it reads exactly like one that never existed (`404`/`UNKNOWN_SESSION`). See [docs/features/session-ttl.md](docs/features/session-ttl.md).
 
 ## Composition root
 
@@ -33,7 +33,7 @@ This project is ESM (`"type": "module"`, NodeNext resolution). [utils/id.ts](src
 - REST: [middleware/errorHandler.ts](src/middleware/errorHandler.ts) catches a thrown `AppError`, looks up its status, and responds `{ error: code, message }`. A `ZodError` (message formatted by `formatZodError`), or body-parser rejecting an oversized/malformed body, maps to `INVALID_REQUEST`/400. Anything else is an unexpected bug — generic 500, no leaked internals.
 - WS: `withErrorHandling` in [ws/handlers.ts](src/ws/handlers.ts) gives the same treatment — a caught `AppError` becomes `socket.emit('error', { error: code, message })`, and a `ZodError` from parsing a payload against [ws/schemas.ts](src/ws/schemas.ts) becomes `INVALID_REQUEST`; anything else logs the full error server-side and emits `INTERNAL_ERROR` with a generic message to the client.
 
-Domain code (`sessionStore.ts`, `pointSystems.ts`) throws `AppError` and never touches Express or Socket.IO response objects directly — that's what keeps the two adapters this thin. Privileged actions (`end-session`) re-validate the admin token on every call, even for an already-authenticated socket — there's no "already trusted" shortcut (see comment at [ws/handlers.ts:130-133](src/ws/handlers.ts#L130-L133)).
+Domain code (`sessionStore.ts`, `pointSystems.ts`) throws `AppError` and never touches Express or Socket.IO response objects directly — that's what keeps the two adapters this thin. Privileged actions (`end-session`) re-validate the admin token on every call, even for an already-authenticated socket — there's no "already trusted" shortcut (see comment at [ws/handlers.ts:135-138](src/ws/handlers.ts#L135-L138)).
 
 ## Votes stay hidden until reveal
 
@@ -42,9 +42,10 @@ This is the product's core rule. Don't add a live roster or live-selection broad
 In [ws/handlers.ts](src/ws/handlers.ts):
 
 - `handleJoin` and `handleAdminAuth` reply only to the calling socket.
-- `handleSelectSquare` sends `selection-changed` to `participantRoom(sessionId, participantId)` ([ws/handlers.ts:37](src/ws/handlers.ts#L37)). That room holds only one participant's own tabs.
+- `handleSelectSquare` sends `selection-changed` to `participantRoom(sessionId, participantId)` ([ws/handlers.ts:38](src/ws/handlers.ts#L38)). That room holds only one participant's own tabs.
 - A socket joins its participant room once `join`/`admin-auth` sets `socket.data.participantId`.
-- `end-session`'s reveal is the only message sent to the whole session. Nothing else uses `io.to(session.id)`.
+- Before the end, nothing goes to the whole session. `end-session`'s reveal is the first message that does.
+- After the end, votes are public. Anyone who joined before the end (and the admin, from any tab) can still vote. Each vote also sends `reveal-updated` with the new reveal to `io.to(session.id)`. Nobody new can `join` an ended session. See [docs/features/change-estimate-after-reveal.md](docs/features/change-estimate-after-reveal.md).
 
 Why it's built this way:
 
@@ -59,8 +60,8 @@ There is no `disconnect` handler in [ws/handlers.ts](src/ws/handlers.ts). A part
 
 Each of these is an accepted product decision, not a gap to fix — check `estimator-plan.md` before "fixing" any of them:
 
-- **Forged pre-join event** ([ws/handlers.ts:119-124](src/ws/handlers.ts#L119-L124), decision #22a): `select-square` before `join`/`admin-auth` has run can only happen from a hand-crafted socket call, never a real client — it gets a plain `error` with no dedicated `ErrorCode`, deliberately, since no real flow reaches it.
-- **Ended-session connect race** ([ws/handlers.ts:155-178](src/ws/handlers.ts#L155-L178), decision #22b): a socket connecting just as the admin ends the session is admitted rather than rejected. The frontend is expected to route off `session-info`'s `ended: true` rather than the backend refusing the connection.
+- **Forged pre-join event** ([ws/handlers.ts:121-126](src/ws/handlers.ts#L121-L126), decision #22a): `select-square` before `join`/`admin-auth` has run can only happen from a hand-crafted socket call, never a real client — it gets a plain `error` with no dedicated `ErrorCode`, deliberately, since no real flow reaches it.
+- **Ended-session connect race** ([ws/handlers.ts:160-183](src/ws/handlers.ts#L160-L183), decision #22b): a socket connecting just as the admin ends the session is admitted rather than rejected. The frontend is expected to route off `session-info`'s `ended: true` rather than the backend refusing the connection. Any socket on an ended session is admitted now: it gets `reveal-updated`, and can vote if it then sends a valid `admin-auth`.
 - **Admin tabs share one identity** ([sessionStore.ts](src/sessionStore.ts)'s `selectSquare`, decision #20): every socket that sends the same `adminToken` shares one `adminParticipantId`, so they share one participant room.
   - Two admin tabs clicking is last-write-wins on `participant.selection`.
   - Every tab gets each `selection-changed`, so none goes stale.

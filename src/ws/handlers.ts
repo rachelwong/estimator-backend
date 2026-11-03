@@ -3,6 +3,7 @@ import { AppError, ErrorCode } from '../errors.js';
 import type { SessionState } from '../types.js';
 import {
   addParticipant,
+  computeReveal,
   endSession,
   getSession,
   selectSquare,
@@ -104,9 +105,10 @@ function handleAdminAuth(socket: AppSocket, session: SessionState, payload: unkn
 // only have come from a hand-forged socket call (a real client always
 // joins first), so it's rejected with a plain error and no dedicated code.
 // Voting the same square again clears the vote instead of recording it
-// again. The result goes to every tab of this one participant (never the
-// session at large), so a second tab stays in step without learning anyone
-// else's vote.
+// again. The result goes to every tab of this one participant, so a second tab
+// stays in step without learning anyone else's vote. Before the end, nothing
+// goes to the session at large. After the end, votes are public, so the new
+// reveal goes to everyone in the session.
 function handleSelectSquare(
   io: AppServer,
   socket: AppSocket,
@@ -124,6 +126,9 @@ function handleSelectSquare(
     }
     const selection = selectSquare(session.id, participantId, time, resource);
     io.to(participantRoom(session.id, participantId)).emit(WsEvent.SelectionChanged, selection);
+    if (session.ended) {
+      io.to(session.id).emit(WsEvent.RevealUpdated, computeReveal(session));
+    }
   });
 }
 

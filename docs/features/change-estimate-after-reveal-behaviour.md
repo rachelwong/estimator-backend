@@ -4,7 +4,7 @@ What this feature does, who can do what, and what everyone sees. No code here.
 How it's built and deployed is in
 [change-estimate-after-reveal.md](change-estimate-after-reveal.md).
 
-Status: planned, not built.
+Status: backend built, frontend not started.
 
 ## In one line
 

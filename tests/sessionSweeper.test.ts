@@ -3,7 +3,13 @@ import type { AddressInfo } from 'node:net';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
-import { createSession, getSession, resetSessionStore } from '../src/sessionStore.js';
+import {
+  createSession,
+  endSession,
+  getSession,
+  resetSessionStore,
+  selectSquare,
+} from '../src/sessionStore.js';
 import { PointSystemType } from '../src/types.js';
 import {
   WsEvent,
@@ -25,6 +31,7 @@ type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>
 const testConfig: Config = { port: 0, corsOrigins: ['http://localhost:5173'], nodeEnv: 'test' };
 
 const OPEN_TTL_MS = 90 * 60 * 1000;
+const ENDED_TTL_MS = 60 * 60 * 1000;
 
 let httpServer: HttpServer;
 let baseUrl: string;
@@ -136,6 +143,24 @@ describe('startSessionSweeper', () => {
     vi.advanceTimersByTime(OPEN_TTL_MS + 60 * 1000);
 
     expect(roomFor).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps an ended session past 1 hour after the end when a vote came later', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    endSession(session.id, session.adminToken);
+    const client = await connectedClient(session.id);
+
+    vi.advanceTimersByTime(30 * 60 * 1000);
+    selectSquare(session.id, session.adminParticipantId, 3, 2);
+    vi.advanceTimersByTime(ENDED_TTL_MS);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(getSession(session.id)).toBe(session);
+    expect(client.connected).toBe(true);
   });
 
   it('leaves a live session and its sockets alone', async () => {

@@ -24,12 +24,14 @@ export const ENDED_SESSION_TTL_MS = 60 * 60 * 1000;
 export const OPEN_SESSION_TTL_MS = 90 * 60 * 1000;
 export const SESSION_SWEEP_INTERVAL_MS = 60 * 1000;
 
-// An ended session's clock runs from endedAt, never lastActivityAt, so ending
-// a session restarts the countdown instead of inheriting the last vote's.
+// An ended session's clock runs from the later of endedAt and its last vote
+// after the end. Ending restarts the countdown, and a pre-end vote can't make
+// it shorter. Only a vote moves lastActivityAt after the end.
 // Exactly at the TTL is still alive; a millisecond past it isn't.
 function isExpired(session: SessionState, now: Date): boolean {
   if (session.ended && session.endedAt) {
-    return now.getTime() - session.endedAt.getTime() > ENDED_SESSION_TTL_MS;
+    const clockStart = Math.max(session.endedAt.getTime(), session.lastActivityAt.getTime());
+    return now.getTime() - clockStart > ENDED_SESSION_TTL_MS;
   }
   return now.getTime() - session.lastActivityAt.getTime() > OPEN_SESSION_TTL_MS;
 }
@@ -166,7 +168,7 @@ export function getSession(sessionId: string): SessionState | undefined {
 // connecting, which is a refresh, a latecomer or a second tab. Deliberately a
 // named write rather than a side effect hidden inside getSession, since every
 // other lookup here is expected to leave the clock alone. Ignored for an ended
-// session, whose clock is endedAt, and for one that's already gone.
+// session, where only a vote extends the clock, and for one that's already gone.
 export function touchSession(sessionId: string): void {
   const session = findLiveSession(sessionId);
   if (!session || session.ended) {
@@ -218,8 +220,9 @@ export function addParticipant(sessionId: string, name: string): Participant {
   return participant;
 }
 
-// Records (or clears) a participant's vote. Rejects if the session has ended
-// or the {time, resource} pair isn't a real square on this point system.
+// Records (or clears) a participant's vote. Rejects if the {time, resource}
+// pair isn't a real square on this point system. Works after the end too:
+// anyone who joined before the end can still change their vote on the Reveal.
 // Voting the same square again deselects it; voting a different square
 // overwrites the previous choice. Returns the resulting selection (null when
 // cleared), so the caller reports the outcome, not the click. Two admin tabs
@@ -233,9 +236,6 @@ export function selectSquare(
   resource: number,
 ): Selection | null {
   const session = getSessionOrThrow(sessionId);
-  if (session.ended) {
-    throw new AppError(ErrorCode.SessionEnded, `Session "${sessionId}" has already ended`);
-  }
 
   const { axisValues } = session.pointSystem;
   if (!axisValues.includes(time) || !axisValues.includes(resource)) {
@@ -257,7 +257,7 @@ export function selectSquare(
     currentSelection.resource === resource;
   participant.selection = isSameSelection ? null : ({ time, resource } satisfies Selection);
   // As in addParticipant: only a vote that passed every check counts as
-  // activity.
+  // activity. After the end, this is what keeps an ended session alive.
   session.lastActivityAt = new Date();
   return participant.selection;
 }

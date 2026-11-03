@@ -323,7 +323,7 @@ describe('select-square', () => {
     expect(errorPayload.message).toBeTruthy();
   });
 
-  it('rejects select-square on an already-ended session with error SESSION_ENDED', async () => {
+  it('accepts select-square on an already-ended session from a participant who joined before', async () => {
     const session = createSession({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
@@ -332,11 +332,179 @@ describe('select-square', () => {
     const client = await joinedClient(session.id, 'Mary');
     endSession(session.id, session.adminToken);
 
-    const errorPromise = waitForEvent<{ error: string }>(client, WsEvent.Error);
+    const changedPromise = waitForEvent(client, WsEvent.SelectionChanged);
+    client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+
+    expect(await changedPromise).toEqual({ time: 3, resource: 2 });
+  });
+
+  it('still rejects select-square on an ended session from a socket that never identified', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    endSession(session.id, session.adminToken);
+    const client = connectClient(session.id);
+    await waitForEvent(client, WsEvent.SessionInfo);
+
+    const errorPromise = waitForEvent<{ error?: string; message: string }>(client, WsEvent.Error);
     client.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
     const errorPayload = await errorPromise;
 
-    expect(errorPayload.error).toBe('SESSION_ENDED');
+    expect(errorPayload.error).toBeUndefined();
+    expect(errorPayload.message).toBeTruthy();
+  });
+});
+
+// After the end, every vote sends the new reveal to the whole session. Before
+// the end, it sends nothing to anyone else.
+describe('reveal-updated', () => {
+  type Reveal = {
+    squares: { time: number; resource: number; names: string[] }[];
+    abstained: string[];
+  };
+
+  async function adminClient(sessionId: string, adminToken: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    const ackPromise = waitForEvent(client, WsEvent.AdminAcknowledged);
+    client.emit(WsEvent.AdminAuth, adminToken);
+    await ackPromise;
+    return client;
+  }
+
+  async function participantClient(sessionId: string, name: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    const joinedPromise = waitForEvent(client, WsEvent.Joined);
+    client.emit(WsEvent.Join, name);
+    await joinedPromise;
+    return client;
+  }
+
+  async function watcherClient(sessionId: string): Promise<ClientSocket> {
+    const client = connectClient(sessionId);
+    await waitForEvent(client, WsEvent.SessionInfo);
+    return client;
+  }
+
+  // Records whether the event ever arrives, for asserting silence after a wait.
+  function watchFor(
+    client: ClientSocket,
+    event: keyof ServerToClientEvents,
+  ): { received: boolean } {
+    const watcher = { received: false };
+    client.on(event, () => {
+      watcher.received = true;
+    });
+    return watcher;
+  }
+
+  it('sends the new reveal to every socket in the session, including a watcher who never joined', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const admin = await adminClient(session.id, session.adminToken);
+    const mary = await participantClient(session.id, 'Mary');
+    admin.emit(WsEvent.EndSession, session.adminToken);
+    await waitForEvent(mary, WsEvent.SessionEnded);
+    const watcher = await watcherClient(session.id);
+
+    const promises = [admin, mary, watcher].map((client) =>
+      waitForEvent<Reveal>(client, WsEvent.RevealUpdated),
+    );
+    mary.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+
+    const expected = { squares: [{ time: 3, resource: 2, names: ['Mary'] }], abstained: ['Jim'] };
+    expect(await Promise.all(promises)).toEqual([expected, expected, expected]);
+  });
+
+  it('still sends selection-changed only to the voter after the end', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const admin = await adminClient(session.id, session.adminToken);
+    const mary = await participantClient(session.id, 'Mary');
+    endSession(session.id, session.adminToken);
+    const adminWatcher = watchFor(admin, WsEvent.SelectionChanged);
+
+    const maryRevealPromise = waitForEvent(mary, WsEvent.RevealUpdated);
+    const adminRevealPromise = waitForEvent(admin, WsEvent.RevealUpdated);
+    mary.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    await Promise.all([maryRevealPromise, adminRevealPromise]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(adminWatcher.received).toBe(false);
+  });
+
+  it('is never sent before the end — votes stay hidden', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const admin = await adminClient(session.id, session.adminToken);
+    const mary = await participantClient(session.id, 'Mary');
+    const watcher = await watcherClient(session.id);
+    const watchers = [admin, mary, watcher].map((client) =>
+      watchFor(client, WsEvent.RevealUpdated),
+    );
+
+    const changedPromise = waitForEvent(mary, WsEvent.SelectionChanged);
+    mary.emit(WsEvent.SelectSquare, { time: 3, resource: 2 });
+    await changedPromise;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(watchers.map((w) => w.received)).toEqual([false, false, false]);
+  });
+
+  it('lets the admin reconnect to an ended session, see their vote, and change it for everyone', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    selectSquare(session.id, session.adminParticipantId, 3, 2);
+    endSession(session.id, session.adminToken);
+    const watcher = await watcherClient(session.id);
+    const admin = connectClient(session.id);
+    await waitForEvent(admin, WsEvent.SessionInfo);
+
+    const ackPromise = waitForEvent<{ selection: unknown }>(admin, WsEvent.AdminAcknowledged);
+    admin.emit(WsEvent.AdminAuth, session.adminToken);
+    expect((await ackPromise).selection).toEqual({ time: 3, resource: 2 });
+
+    const watcherRevealPromise = waitForEvent<Reveal>(watcher, WsEvent.RevealUpdated);
+    admin.emit(WsEvent.SelectSquare, { time: 1, resource: 1 });
+
+    expect(await watcherRevealPromise).toEqual({
+      squares: [{ time: 1, resource: 1, names: ['Jim'] }],
+      abstained: [],
+    });
+  });
+
+  it('is not sent for a rejected vote after the end', async () => {
+    const session = createSession({
+      adminName: 'Jim',
+      pointSystemType: PointSystemType.Numerical,
+      sliderMax: 5,
+    });
+    const admin = await adminClient(session.id, session.adminToken);
+    endSession(session.id, session.adminToken);
+    const watcher = await watcherClient(session.id);
+    const watcherWatch = watchFor(watcher, WsEvent.RevealUpdated);
+
+    const errorPromise = waitForEvent<{ error: string }>(admin, WsEvent.Error);
+    admin.emit(WsEvent.SelectSquare, { time: 3, resource: 999 });
+    expect((await errorPromise).error).toBe('INVALID_SELECTION');
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(watcherWatch.received).toBe(false);
   });
 });
 
