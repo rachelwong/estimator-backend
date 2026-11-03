@@ -1,5 +1,4 @@
 import { createServer, type Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
@@ -10,6 +9,7 @@ import type { AppServer, ClientToServerEvents, ServerToClientEvents } from '../s
 import { WsEvent } from '../src/ws/events.js';
 import { registerSocketHandlers } from '../src/ws/handlers.js';
 import { createIoServer } from '../src/ws/ioServer.js';
+import { listenOnTestHost } from './helpers.js';
 
 type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>;
 
@@ -25,8 +25,7 @@ beforeEach(async () => {
   httpServer = createServer();
   io = createIoServer(httpServer, testConfig);
   registerSocketHandlers(io);
-  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
-  baseUrl = `http://localhost:${(httpServer.address() as AddressInfo).port}`;
+  baseUrl = await listenOnTestHost(httpServer);
 });
 
 afterEach(async () => {

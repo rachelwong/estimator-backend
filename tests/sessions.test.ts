@@ -1,3 +1,5 @@
+import { createServer, type Server as HttpServer } from 'node:http';
+import type { Express } from 'express';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -9,6 +11,7 @@ import {
 } from '../src/schemas.js';
 import { endSession, getSession, resetSessionStore, selectSquare } from '../src/sessionStore.js';
 import { PointSystemType } from '../src/types.js';
+import { listenOnTestHost } from './helpers.js';
 
 const testConfig: Config = {
   port: 0,
@@ -20,22 +23,36 @@ beforeEach(() => {
   resetSessionStore();
 });
 
-afterEach(() => {
+const openServers: HttpServer[] = [];
+
+afterEach(async () => {
   vi.useRealTimers();
+  for (const server of openServers.splice(0)) {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
 });
+
+// Starts the app on 127.0.0.1 and returns its URL for supertest. Passing the
+// app itself would let supertest listen on every address (see helpers.ts).
+async function serve(app: Express): Promise<string> {
+  const server = createServer(app);
+  openServers.push(server);
+  return listenOnTestHost(server);
+}
 
 describe('GET /healthz', () => {
   it('returns 200', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).get('/healthz');
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).get('/healthz');
     expect(response.status).toBe(200);
   });
 });
 
 describe('POST /sessions', () => {
   it('creates a numerical session', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -48,8 +65,8 @@ describe('POST /sessions', () => {
   });
 
   it('creates a fibonacci session', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Fibonacci,
       sliderMax: 10,
@@ -61,8 +78,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a name carrying a symbol as INVALID_NAME', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim@Bob',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -74,8 +91,8 @@ describe('POST /sessions', () => {
   });
 
   it('accepts a name with an embedded space', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'jim bob',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -87,8 +104,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects an over-ceiling sliderMax as INVALID_SLIDER_MAX', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 21,
@@ -100,8 +117,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a missing adminName as INVALID_REQUEST', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
     });
@@ -112,8 +129,8 @@ describe('POST /sessions', () => {
   });
 
   it('names every invalid field in one readable message, not a JSON blob of issues', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       pointSystemType: PointSystemType.Numerical,
       sliderMax: '5',
     });
@@ -125,8 +142,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a sliderMax sent as a string as INVALID_REQUEST', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: '5',
@@ -138,8 +155,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a pointSystemType outside the enum as INVALID_REQUEST', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: 'tshirt',
       sliderMax: 5,
@@ -151,8 +168,8 @@ describe('POST /sessions', () => {
   });
 
   it('returns the description it was given', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -165,8 +182,8 @@ describe('POST /sessions', () => {
   });
 
   it('returns a null description when none was given', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -178,8 +195,8 @@ describe('POST /sessions', () => {
   });
 
   it('rejects a description sent as a number as INVALID_REQUEST', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -194,9 +211,9 @@ describe('POST /sessions', () => {
   // The message states the rule and never echoes the input, so user text never
   // reaches the server logs (errorHandler logs every AppError message).
   it('rejects a 301-character description as INVALID_DESCRIPTION, without echoing it', async () => {
-    const app = createApp(testConfig);
+    const api = await serve(createApp(testConfig));
     const tooLong = 'x'.repeat(301);
-    const response = await request(app).post('/sessions').send({
+    const response = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -225,8 +242,8 @@ describe('request body limits', () => {
   }
 
   it('accepts a body of exactly 8kb', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app)
+    const api = await serve(createApp(testConfig));
+    const response = await request(api)
       .post('/sessions')
       .set('Content-Type', 'application/json')
       .send(paddedBody(JSON_BODY_LIMIT_BYTES));
@@ -235,8 +252,8 @@ describe('request body limits', () => {
   });
 
   it('rejects a body one byte over 8kb as INVALID_REQUEST, not a 500', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app)
+    const api = await serve(createApp(testConfig));
+    const response = await request(api)
       .post('/sessions')
       .set('Content-Type', 'application/json')
       .send(paddedBody(JSON_BODY_LIMIT_BYTES + 1));
@@ -247,8 +264,8 @@ describe('request body limits', () => {
   });
 
   it('rejects malformed JSON as INVALID_REQUEST, not a 500', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app)
+    const api = await serve(createApp(testConfig));
+    const response = await request(api)
       .post('/sessions')
       .set('Content-Type', 'application/json')
       .send('{"adminName": "Jim",');
@@ -261,8 +278,8 @@ describe('request body limits', () => {
 
 describe('security headers', () => {
   it('sends helmet headers and no x-powered-by', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).get('/healthz');
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).get('/healthz');
 
     expect(response.headers['x-content-type-options']).toBe('nosniff');
     expect(response.headers['x-powered-by']).toBeUndefined();
@@ -271,15 +288,15 @@ describe('security headers', () => {
 
 describe('GET /sessions/:id', () => {
   it('returns the in-progress session without a reveal or adminToken', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
     });
     const created = CreateSessionResponseSchema.parse(createdResponse.body);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(200);
     const body = GetSessionResponseSchema.parse(response.body);
@@ -289,8 +306,8 @@ describe('GET /sessions/:id', () => {
   });
 
   it('returns the ended session with a reveal', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -298,7 +315,7 @@ describe('GET /sessions/:id', () => {
     const created = CreateSessionResponseSchema.parse(createdResponse.body);
     endSession(created.sessionId, created.adminToken);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(200);
     const body = GetSessionResponseSchema.parse(response.body);
@@ -308,8 +325,8 @@ describe('GET /sessions/:id', () => {
   });
 
   it('shows a vote made after the end in the reveal', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -318,7 +335,7 @@ describe('GET /sessions/:id', () => {
     endSession(created.sessionId, created.adminToken);
     selectSquare(created.sessionId, getSession(created.sessionId)!.adminParticipantId, 3, 2);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     const body = GetSessionResponseSchema.parse(response.body);
     expect(body.reveal).toEqual({
@@ -328,8 +345,8 @@ describe('GET /sessions/:id', () => {
   });
 
   it('returns the description of an open session', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -337,7 +354,7 @@ describe('GET /sessions/:id', () => {
     });
     const created = CreateSessionResponseSchema.parse(createdResponse.body);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(200);
     const body = GetSessionResponseSchema.parse(response.body);
@@ -345,8 +362,8 @@ describe('GET /sessions/:id', () => {
   });
 
   it('returns the description of an ended session', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -355,7 +372,7 @@ describe('GET /sessions/:id', () => {
     const created = CreateSessionResponseSchema.parse(createdResponse.body);
     endSession(created.sessionId, created.adminToken);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(200);
     const body = GetSessionResponseSchema.parse(response.body);
@@ -363,15 +380,15 @@ describe('GET /sessions/:id', () => {
   });
 
   it('returns a null description for a session created without one', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
     });
     const created = CreateSessionResponseSchema.parse(createdResponse.body);
 
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(200);
     const body = GetSessionResponseSchema.parse(response.body);
@@ -381,8 +398,8 @@ describe('GET /sessions/:id', () => {
   // An expired session is deleted outright, so over REST it is exactly the
   // 404 an id that never existed gets — no "expired" variant to tell apart.
   it('returns 404 UNKNOWN_SESSION once the session has expired', async () => {
-    const app = createApp(testConfig);
-    const createdResponse = await request(app).post('/sessions').send({
+    const api = await serve(createApp(testConfig));
+    const createdResponse = await request(api).post('/sessions').send({
       adminName: 'Jim',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
@@ -393,7 +410,7 @@ describe('GET /sessions/:id', () => {
     // Only Date is faked — supertest still needs its real timers.
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(justPastOpenTtl);
-    const response = await request(app).get(`/sessions/${created.sessionId}`);
+    const response = await request(api).get(`/sessions/${created.sessionId}`);
 
     expect(response.status).toBe(404);
     const body = ErrorResponseSchema.parse(response.body);
@@ -401,8 +418,8 @@ describe('GET /sessions/:id', () => {
   });
 
   it('returns 404 UNKNOWN_SESSION for an id that was never created', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).get('/sessions/this-session-id-does-not-exist');
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).get('/sessions/this-session-id-does-not-exist');
 
     expect(response.status).toBe(404);
     const body = ErrorResponseSchema.parse(response.body);
@@ -412,8 +429,8 @@ describe('GET /sessions/:id', () => {
 
 describe('unmatched route', () => {
   it('does not return 200', async () => {
-    const app = createApp(testConfig);
-    const response = await request(app).get('/this-route-does-not-exist');
+    const api = await serve(createApp(testConfig));
+    const response = await request(api).get('/this-route-does-not-exist');
     expect(response.status).not.toBe(200);
   });
 });

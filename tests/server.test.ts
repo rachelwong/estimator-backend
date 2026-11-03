@@ -1,5 +1,4 @@
 import { createServer, type Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -10,6 +9,7 @@ import { PointSystemType } from '../src/types.js';
 import { WsEvent, type ClientToServerEvents, type ServerToClientEvents } from '../src/ws/events.js';
 import { registerSocketHandlers } from '../src/ws/handlers.js';
 import { createIoServer } from '../src/ws/ioServer.js';
+import { listenOnTestHost } from './helpers.js';
 
 type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>;
 
@@ -33,9 +33,7 @@ beforeEach(async () => {
   httpServer = createServer(app);
   const io = createIoServer(httpServer, testConfig);
   registerSocketHandlers(io);
-  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
-  const address = httpServer.address() as AddressInfo;
-  baseUrl = `http://localhost:${address.port}`;
+  baseUrl = await listenOnTestHost(httpServer);
 });
 
 afterEach(async () => {
@@ -109,10 +107,17 @@ describe('CORS with multiple origins', () => {
     nodeEnv: 'test',
   };
   let corsServer: HttpServer;
+  let corsUrl: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     corsServer = createServer(createApp(multiOriginConfig));
     createIoServer(corsServer, multiOriginConfig);
+    corsUrl = await listenOnTestHost(corsServer);
+  });
+
+  afterEach(async () => {
+    corsServer.closeAllConnections();
+    await new Promise<void>((resolve) => corsServer.close(() => resolve()));
   });
 
   const SOCKET_IO_POLLING_PATH = '/socket.io/?EIO=4&transport=polling';
@@ -121,10 +126,10 @@ describe('CORS with multiple origins', () => {
     ['REST', '/healthz'],
     ['Socket.IO', SOCKET_IO_POLLING_PATH],
   ])('%s reflects each listed origin', async (_transport, path) => {
-    const first = await request(corsServer).get(path).set('Origin', firstOrigin);
+    const first = await request(corsUrl).get(path).set('Origin', firstOrigin);
     expect(first.headers['access-control-allow-origin']).toBe('https://first.example.com');
 
-    const second = await request(corsServer).get(path).set('Origin', secondOrigin);
+    const second = await request(corsUrl).get(path).set('Origin', secondOrigin);
     expect(second.headers['access-control-allow-origin']).toBe('https://second.example.com');
   });
 
@@ -132,7 +137,7 @@ describe('CORS with multiple origins', () => {
     ['REST', '/healthz'],
     ['Socket.IO', SOCKET_IO_POLLING_PATH],
   ])('%s sends no allow-origin header for an unlisted origin', async (_transport, path) => {
-    const response = await request(corsServer).get(path).set('Origin', unlistedOrigin);
+    const response = await request(corsUrl).get(path).set('Origin', unlistedOrigin);
     expect(response.headers['access-control-allow-origin']).toBeUndefined();
   });
 
@@ -143,7 +148,7 @@ describe('CORS with multiple origins', () => {
       [firstOrigin, 'https://first.example.com'],
       [secondOrigin, 'https://second.example.com'],
     ]) {
-      const response = await request(corsServer)
+      const response = await request(corsUrl)
         .options('/sessions')
         .set('Origin', origin)
         .set('Access-Control-Request-Method', 'POST')
@@ -162,10 +167,17 @@ describe('CORS with a single origin', () => {
   const unlistedOrigin = 'https://unlisted.example.com';
   const singleOriginConfig: Config = { port: 0, corsOrigins: [onlyOrigin], nodeEnv: 'test' };
   let corsServer: HttpServer;
+  let corsUrl: string;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     corsServer = createServer(createApp(singleOriginConfig));
     createIoServer(corsServer, singleOriginConfig);
+    corsUrl = await listenOnTestHost(corsServer);
+  });
+
+  afterEach(async () => {
+    corsServer.closeAllConnections();
+    await new Promise<void>((resolve) => corsServer.close(() => resolve()));
   });
 
   const SOCKET_IO_POLLING_PATH = '/socket.io/?EIO=4&transport=polling';
@@ -174,7 +186,7 @@ describe('CORS with a single origin', () => {
     ['REST', '/healthz'],
     ['Socket.IO', SOCKET_IO_POLLING_PATH],
   ])('%s reflects the listed origin', async (_transport, path) => {
-    const response = await request(corsServer).get(path).set('Origin', onlyOrigin);
+    const response = await request(corsUrl).get(path).set('Origin', onlyOrigin);
     expect(response.headers['access-control-allow-origin']).toBe('https://only.example.com');
   });
 
@@ -182,12 +194,12 @@ describe('CORS with a single origin', () => {
     ['REST', '/healthz'],
     ['Socket.IO', SOCKET_IO_POLLING_PATH],
   ])('%s sends no allow-origin header for an unlisted origin', async (_transport, path) => {
-    const response = await request(corsServer).get(path).set('Origin', unlistedOrigin);
+    const response = await request(corsUrl).get(path).set('Origin', unlistedOrigin);
     expect(response.headers['access-control-allow-origin']).toBeUndefined();
   });
 
   it('passes the POST /sessions preflight for the listed origin', async () => {
-    const response = await request(corsServer)
+    const response = await request(corsUrl)
       .options('/sessions')
       .set('Origin', onlyOrigin)
       .set('Access-Control-Request-Method', 'POST')

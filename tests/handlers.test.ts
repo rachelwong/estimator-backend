@@ -1,5 +1,4 @@
 import { createServer, type Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { io as ioClient, type Socket as ClientSocketType } from 'socket.io-client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../src/config.js';
@@ -7,31 +6,38 @@ import { createSession, endSession, resetSessionStore, selectSquare } from '../s
 import { PointSystemType } from '../src/types.js';
 import { registerSocketHandlers } from '../src/ws/handlers.js';
 import { createIoServer, MAX_SOCKET_MESSAGE_BYTES } from '../src/ws/ioServer.js';
-import { WsEvent, type ClientToServerEvents, type ServerToClientEvents } from '../src/ws/events.js';
+import {
+  WsEvent,
+  type AppServer,
+  type ClientToServerEvents,
+  type ServerToClientEvents,
+} from '../src/ws/events.js';
+import { listenOnTestHost } from './helpers.js';
 
 type ClientSocket = ClientSocketType<ServerToClientEvents, ClientToServerEvents>;
 
 const testConfig: Config = { port: 0, corsOrigins: ['http://localhost:5173'], nodeEnv: 'test' };
 
 let httpServer: HttpServer;
+let io: AppServer;
 let baseUrl: string;
 const openClients: ClientSocket[] = [];
 
 beforeEach(async () => {
   resetSessionStore();
   httpServer = createServer();
-  const io = createIoServer(httpServer, testConfig);
+  io = createIoServer(httpServer, testConfig);
   registerSocketHandlers(io);
-  await new Promise<void>((resolve) => httpServer.listen(0, resolve));
-  const address = httpServer.address() as AddressInfo;
-  baseUrl = `http://localhost:${address.port}`;
+  baseUrl = await listenOnTestHost(httpServer);
 });
 
 afterEach(async () => {
   for (const client of openClients.splice(0)) {
     client.close();
   }
-  await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+  // Use io.close(), not httpServer.close(). httpServer.close() waits for open
+  // connections to finish, and here it sometimes hung until the 10s timeout.
+  await io.close();
 });
 
 function connectClient(sessionId: string | undefined): ClientSocket {
