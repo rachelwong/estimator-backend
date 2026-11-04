@@ -140,10 +140,10 @@ describe('join', () => {
       client,
       WsEvent.Joined,
     );
-    client.emit(WsEvent.Join, 'mary');
+    client.emit(WsEvent.Join, '  mARY  ');
     const joined = await joinedPromise;
 
-    expect(joined.name).toBe('Mary');
+    expect(joined.name).toBe('mARY');
     expect(joined.participantId).not.toBe(session.adminParticipantId);
   });
 

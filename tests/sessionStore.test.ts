@@ -48,10 +48,10 @@ describe('createSession', () => {
     expect(session.participants.get(session.adminParticipantId)?.name).toBe('Amy');
   });
 
-  it('capitalizes the admin name', () => {
+  it('keeps the admin name in the case it was typed', () => {
     const session = createSession({ adminName: 'aMY', ...NUMERICAL });
 
-    expect(session.participants.get(session.adminParticipantId)?.name).toBe('Amy');
+    expect(session.participants.get(session.adminParticipantId)?.name).toBe('aMY');
   });
 
   it('rejects an empty admin name', () => {
@@ -69,10 +69,10 @@ describe('createSession', () => {
     expectAppError(() => createSession({ adminName: 'Amy@Bee', ...NUMERICAL }), 'INVALID_NAME');
   });
 
-  it('keeps an embedded space and capitalizes each word', () => {
-    const session = createSession({ adminName: 'amy bee', ...NUMERICAL });
+  it('keeps an embedded space and the case of each word', () => {
+    const session = createSession({ adminName: 'jONath an', ...NUMERICAL });
 
-    expect(session.participants.get(session.adminParticipantId)?.name).toBe('Amy Bee');
+    expect(session.participants.get(session.adminParticipantId)?.name).toBe('jONath an');
   });
 
   it('regenerates the session id when the generator produces a collision', () => {
@@ -167,7 +167,7 @@ describe('addParticipant', () => {
 
     const participant = addParticipant(session.id, 'abcdefghijklmnopqrst');
 
-    expect(participant.name).toBe('Abcdefghijklmnopqrst');
+    expect(participant.name).toBe('abcdefghijklmnopqrst');
   });
 
   it('trims leading/trailing whitespace before storing the name', () => {
@@ -184,20 +184,34 @@ describe('addParticipant', () => {
     expectAppError(() => addParticipant(session.id, 'Bea@Cee'), 'INVALID_NAME');
   });
 
-  it('keeps an embedded space and collapses a doubled one', () => {
+  it('keeps a doubled embedded space as typed', () => {
     const session = createSession({ adminName: 'Amy', ...NUMERICAL });
 
     const participant = addParticipant(session.id, 'bea  cee');
 
-    expect(participant.name).toBe('Bea Cee');
+    expect(participant.name).toBe('bea  cee');
   });
 
-  it('capitalizes a valid name', () => {
+  it('keeps a valid name in the case it was typed', () => {
     const session = createSession({ adminName: 'Amy', ...NUMERICAL });
 
     const participant = addParticipant(session.id, 'bEA');
 
-    expect(participant.name).toBe('Bea');
+    expect(participant.name).toBe('bEA');
+  });
+
+  it('accepts a 20-character name whose spaces are part of the count', () => {
+    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+
+    const participant = addParticipant(session.id, 'bbbbbbbbbb  cccccccc');
+
+    expect(participant.name).toBe('bbbbbbbbbb  cccccccc');
+  });
+
+  it('rejects a 21-character name whose spaces are part of the count', () => {
+    const session = createSession({ adminName: 'Amy', ...NUMERICAL });
+
+    expectAppError(() => addParticipant(session.id, 'bbbbbbbbbb  ccccccccc'), 'INVALID_NAME');
   });
 
   it('rejects an empty name', () => {
@@ -227,7 +241,23 @@ describe('addParticipant', () => {
 
     const participant = addParticipant(session.id, 'jim');
 
-    expect(participant.name).toBe('Jim-1');
+    expect(participant.name).toBe('jim-1');
+  });
+
+  it('de-dupes a name that differs only in its spacing', () => {
+    const session = createSession({ adminName: 'Jim Bob', ...NUMERICAL });
+
+    const participant = addParticipant(session.id, 'jim  bob');
+
+    expect(participant.name).toBe('jim  bob-1');
+  });
+
+  it('does not de-dupe a name that differs only by a missing space', () => {
+    const session = createSession({ adminName: 'Jim Bob', ...NUMERICAL });
+
+    const participant = addParticipant(session.id, 'JimBob');
+
+    expect(participant.name).toBe('JimBob');
   });
 
   it('rejects joining a session that has already ended', () => {

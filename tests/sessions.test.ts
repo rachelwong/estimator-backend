@@ -93,14 +93,14 @@ describe('POST /sessions', () => {
   it('accepts a name with an embedded space', async () => {
     const api = await serve(createApp(testConfig));
     const response = await request(api).post('/sessions').send({
-      adminName: 'jim bob',
+      adminName: 'jONath an',
       pointSystemType: PointSystemType.Numerical,
       sliderMax: 5,
     });
 
     expect(response.status).toBe(201);
     const body = CreateSessionResponseSchema.parse(response.body);
-    expect(body.adminName).toBe('Jim Bob');
+    expect(body.adminName).toBe('jONath an');
   });
 
   it('rejects an over-ceiling sliderMax as INVALID_SLIDER_MAX', async () => {
