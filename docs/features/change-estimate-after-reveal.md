@@ -497,10 +497,12 @@ backend, votes on the Reveal fail with `SESSION_ENDED`.
     still brief.
   - The Reveal notice and the Welcome page show the new wording.
   - DevTools → Network: one `wss://` socket stays open on the Reveal.
-- [ ] F5. Run the smoke suite against production:
+- [x] F5. Run the smoke suite against production:
       `SMOKE_APP_URL=https://fold-and-flip.vercel.app SMOKE_API_URL=https://estimator-backend-1nf2.onrender.com npm run smoke`.
       Run it after the deploy. The new checks fail against a build that
       doesn't have the feature yet.
+      Done 2026-11-04 against `release/design` at `a7e116d`: 216/216,
+      including all 30 `afterReveal` checks.
 - [ ] F6. Don't merge `release/design` into frontend `master` as part of this
       work. The prototype keeps working without it.
 
