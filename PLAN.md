@@ -112,7 +112,7 @@ export function generateParticipantId(): string;   // crypto.randomUUID()
 #### `src/utils/validation.ts`
 
 ```ts
-export function validateParticipantName(name: string): void;  // /^[A-Za-z0-9]+( [A-Za-z0-9]+)*$/ to 20 chars, throws INVALID_NAME
+export function validateParticipantName(name: string): void;  // /^[A-Za-z0-9]+( +[A-Za-z0-9]+)*$/ to 20 chars, throws INVALID_NAME
 ```
 
 **Why**: never trust the client. This is the one place the name rule lives — called from `sessionStore`, not from the route — so both REST's `POST /sessions` and the WS `join` event enforce it identically without either transport needing its own copy.
@@ -134,7 +134,7 @@ export function resetSessionStore(): void;   // test-only, wipes the Map
 
 **Why**, function by function:
 - **`createSession`** — validates the admin's name and point-system settings, regenerates the session id on a collision, creates the admin as the session's first participant.
-- **`addParticipant`** — rejects with `SESSION_ENDED` if the session already ended (guards a stale `join` racing an `end-session`). Names are trimmed (leading/trailing whitespace only — an embedded space still fails validation), capitalized, then de-duplicated case-insensitively (`Jim` → `Jim-1` → `Jim-2` ...) via an existence-check loop rather than a count — participant records are never deleted, so counting `name*` matches can be wrong once an earlier suffixed name is orphaned (decision #11).
+- **`addParticipant`** — rejects with `SESSION_ENDED` if the session already ended (guards a stale `join` racing an `end-session`). Names are trimmed (leading/trailing whitespace only — case and interior spacing are kept as typed), then de-duplicated ignoring case and spacing (`Jim` → `Jim-1` → `Jim-2` ...) via an existence-check loop rather than a count — participant records are never deleted, so counting `name*` matches can be wrong once an earlier suffixed name is orphaned (decision #11).
 - **`selectSquare`** — also rejects `SESSION_ENDED`. Validates `{time, resource}` is an exact member of the session's `axisValues` (never trust the client). Voting the same square again clears the vote; a different square overwrites it. `participantId` always comes from server-held connection state (Step 4), never the request payload, so an unmatched id here is a programming bug, not real client input — it throws a plain `Error`, not an `AppError`.
 - **`validateAdminToken`** — looks up the session first (`UNKNOWN_SESSION` before ever checking the token), then compares the token, returning the session so callers don't need a second lookup.
 - **`endSession`** — always re-validates the token, even on an already-ended session (never trust the client, applied to auth — no "already authenticated this connection" shortcut). Idempotent: a second call returns the same reveal with `wasAlreadyEnded: true` instead of re-mutating state (decision #21).
@@ -142,9 +142,9 @@ export function resetSessionStore(): void;   // test-only, wipes the Map
 - **`resetSessionStore`** — test-only; vitest runs every case against the same module instance, so tests need an explicit reset between them.
 
 **Test Cases** (`tests/sessionStore.test.ts`):
-- `createSession` — sole initial participant, name trim/capitalize, empty/over-length/embedded-space rejection, session-id collision regeneration.
+- `createSession` — sole initial participant, name trimmed with case and embedded space kept, empty/over-length/symbol rejection, session-id collision regeneration.
 - `getSession` — found vs. `undefined`.
-- `addParticipant` — unknown session, 20-char ceiling, trim, embedded-space rejection, capitalize, empty/over-length rejection, dedup chain (`Jim`→`Jim-1`→`Jim-2`), case-insensitive dedup, rejects on an ended session.
+- `addParticipant` — unknown session, 20-char ceiling (spaces counted), trim, case and doubled space kept as typed, symbol rejection, empty/over-length rejection, dedup chain (`Jim`→`Jim-1`→`Jim-2`), dedup ignoring case and spacing, rejects on an ended session.
 - `selectSquare` — unknown session, a pair where only one coordinate is out of range (proves both sides are checked independently), first vote, deselect, overwrite, non-member pair rejection, rejects on an ended session.
 - `endSession` — marks ended + returns reveal, idempotent second call, rejects a bad token even on an already-ended session.
 - `validateAdminToken` — unknown session before the token check, mismatched token, matching token returns the session.
@@ -192,7 +192,7 @@ sessionsRouter.post('/', (req, res) => { /* POST /sessions */ });
 sessionsRouter.get('/:id', (req, res) => { /* GET /sessions/:id */ });
 ```
 
-**Why**: `POST /` parses the body with `CreateSessionRequestSchema.parse()` first (throws `ZodError` on a shape mismatch), calls `createSession`, and echoes back the *stored* admin name (trimmed/capitalized) rather than the raw input, so the admin isn't shown a name that won't match what other participants see at reveal. `GET /:id` throws `UNKNOWN_SESSION` if `getSession` returns `undefined`. Both responses are built as new plain objects picking only the documented fields — never a `{...session}` spread, since `SessionState` carries `adminToken` and a naive spread would leak it into this public, unauthenticated endpoint.
+**Why**: `POST /` parses the body with `CreateSessionRequestSchema.parse()` first (throws `ZodError` on a shape mismatch), calls `createSession`, and echoes back the *stored* admin name (trimmed) rather than the raw input, so the admin isn't shown a name that won't match what other participants see at reveal. `GET /:id` throws `UNKNOWN_SESSION` if `getSession` returns `undefined`. Both responses are built as new plain objects picking only the documented fields — never a `{...session}` spread, since `SessionState` carries `adminToken` and a naive spread would leak it into this public, unauthenticated endpoint.
 
 #### `src/app.ts`
 
@@ -212,7 +212,7 @@ export function createApp(config: Config): Express;
 
 **Test Cases** (`tests/sessions.test.ts`, `tests/config.test.ts`):
 - `GET /healthz` → 200.
-- `POST /sessions` — numerical + fibonacci happy paths (axis values hand-typed, not the implementation's own formula); domain rejection (embedded-space name, over-ceiling slider) vs. shape rejection (missing field, wrong type, bad enum value) — proving the two failure categories stay distinct.
+- `POST /sessions` — numerical + fibonacci happy paths (axis values hand-typed, not the implementation's own formula); domain rejection (name with a symbol, over-ceiling slider) vs. shape rejection (missing field, wrong type, bad enum value) — proving the two failure categories stay distinct.
 - `GET /sessions/:id` — in-progress (no reveal, no leaked `adminToken`), ended (reveal present, still no leak), unknown id → 404.
 - An unmatched route → non-200 (guards against a future catch-all accidentally 200-ing everything).
 - `loadConfig` — port default/override, throws in production on unset/trailing-slash/local-default `CORS_ORIGIN`, doesn't throw outside production, `LOCAL_DEV_CORS_ORIGIN` matches `.env.example`.

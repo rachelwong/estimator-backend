@@ -9,11 +9,8 @@ import type {
   SessionState,
 } from './types.js';
 import { generateAdminToken, generateParticipantId, generateSessionId } from './utils/id.js';
-import {
-  normalizeDescription,
-  normalizeParticipantName,
-  validateParticipantName,
-} from './utils/validation.js';
+import { REPEATED_SPACES_PATTERN } from './utils/patterns.js';
+import { normalizeDescription, validateParticipantName } from './utils/validation.js';
 
 const sessions = new Map<string, SessionState>();
 
@@ -56,22 +53,21 @@ function findLiveSession(sessionId: string): SessionState | undefined {
   return session;
 }
 
-// Normalizes a raw name's whitespace, validates it, then capitalizes each word
-// (first letter upper, rest lower) so every stored name is display-ready.
-// Per word, not per name: "jim bob" is "Jim Bob", not "Jim bob".
+// Trims a raw name's ends and validates it. Case and interior spacing are
+// kept exactly as typed: "jONath an" is stored as "jONath an".
 function formatName(name: string): string {
-  const normalized = normalizeParticipantName(name);
-  validateParticipantName(normalized);
-  return normalized
-    .split(' ')
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ');
+  const trimmed = name.trim();
+  validateParticipantName(trimmed);
+  return trimmed;
 }
 
-// Checks whether any current participant already has this name, ignoring case.
+// Checks whether any current participant already has this name, ignoring case
+// and spacing: "jim  bob" is taken once "Jim Bob" is.
 function isNameTaken(session: SessionState, candidateName: string): boolean {
+  const toKey = (name: string) => name.replace(REPEATED_SPACES_PATTERN, ' ').toLowerCase();
+  const candidateKey = toKey(candidateName);
   return Array.from(session.participants.values()).some(
-    (participant) => participant.name.toLowerCase() === candidateName.toLowerCase(),
+    (participant) => toKey(participant.name) === candidateKey,
   );
 }
 

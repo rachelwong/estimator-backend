@@ -1,19 +1,9 @@
 import type { ZodError } from 'zod';
 import { AppError, ErrorCode } from '../errors.js';
-import {
-  PARTICIPANT_NAME_PATTERN,
-  REPEATED_SPACES_PATTERN,
-  WHITESPACE_RUN_PATTERN,
-} from './patterns.js';
+import { PARTICIPANT_NAME_PATTERN, WHITESPACE_RUN_PATTERN } from './patterns.js';
 
 const MAX_NAME_LENGTH = 20;
 const MAX_DESCRIPTION_LENGTH = 300;
-
-// Trims the ends and collapses runs of spaces, so stray whitespace is never
-// what fails. What comes back is what gets validated and stored.
-export function normalizeParticipantName(name: string): string {
-  return name.trim().replace(REPEATED_SPACES_PATTERN, ' ');
-}
 
 // Turns a ZodError into one readable line, e.g.
 // "adminName: Invalid input: expected string, received undefined".
