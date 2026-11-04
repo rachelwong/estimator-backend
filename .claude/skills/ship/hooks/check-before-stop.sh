@@ -1,11 +1,11 @@
 #!/bin/bash
 # Stop hook for /ship. Exit 2 blocks Claude from finishing and sends stderr back to it.
-# Checks every estimator checkout with uncommitted code changes, not just the one the session started in:
-# the backend, the frontend (release/design) and the frontend master worktree.
-# Same file in estimator-backend and estimator-frontend. Keep both copies in sync.
+# Checks both estimator repos with uncommitted code changes, not just the one the session started in.
+# The frontend is checked on whichever branch is checked out (release/design, or master in round 2).
+# Same file in estimator-backend and both estimator-frontend branches. Keep all copies in sync.
 
 MAX_BLOCKS=3
-CHECKOUTS=(estimator-backend estimator-frontend estimator-frontend-master)
+CHECKOUTS=(estimator-backend estimator-frontend)
 
 input=$(cat)
 session_id=$(jq -r '.session_id' <<<"$input")
@@ -28,7 +28,7 @@ run_checks() {
       npm run typecheck && npm run lint && npm test || return 1
       (($# == 0)) || npx prettier --check -- "$@"
       ;;
-    estimator-frontend*) npx tsc -b && npm run lint ;;
+    estimator-frontend) npx tsc -b && npm run lint ;;
   esac
 }
 
@@ -96,14 +96,9 @@ fi
 # Prints the checkout name if it has code changes.
 code_in() { [[ "$code_in" == *" $1 "* ]] && echo "$1"; }
 backend=$(code_in estimator-backend)
-design=$(code_in estimator-frontend)
-master=$(code_in estimator-frontend-master)
+frontend=$(code_in estimator-frontend)
 
-if [[ -n "$design" && -z "$master" ]] || [[ -z "$design" && -n "$master" ]]; then
-  remind_once branch-reminded "Only one frontend branch changed. Make the same functional change on the other (release/design and master), or say why it doesn't apply."
-fi
-
-if [[ -n "$backend" && -n "$design$master" ]] && ! $plan_changed; then
+if [[ -n "$backend" && -n "$frontend" ]] && ! $plan_changed; then
   remind_once plan-reminded "Code changed in both backend and frontend but estimator-plan.md didn't. Update every copy, or say why it doesn't apply."
 fi
 
